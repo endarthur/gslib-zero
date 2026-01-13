@@ -168,6 +168,11 @@ cd fortran && make
 python -m gslib_zero.download_binaries
 ```
 
+## Documentation
+
+- `ROADMAP.md` — Project roadmap and version milestones
+- `docs/binary-io-implementation.md` — How to implement binary I/O in GSLIB programs
+
 ## Questions to Ask Arthur
 
 If you're unsure about something:
