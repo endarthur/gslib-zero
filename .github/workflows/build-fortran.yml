@@ -39,6 +39,13 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install gcc
+          # Create symlink for gfortran if not exists
+          GCC_VERSION=$(brew list --versions gcc | sed 's/gcc //' | cut -d. -f1)
+          if [ ! -f /usr/local/bin/gfortran ]; then
+            sudo ln -sf /opt/homebrew/bin/gfortran-${GCC_VERSION} /usr/local/bin/gfortran 2>/dev/null || \
+            sudo ln -sf /usr/local/bin/gfortran-${GCC_VERSION} /usr/local/bin/gfortran 2>/dev/null || \
+            echo "gfortran-${GCC_VERSION} will be found by build script"
+          fi
 
       - name: Install gfortran (Windows)
         if: runner.os == 'Windows'

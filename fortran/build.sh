@@ -12,8 +12,41 @@
 
 set -e
 
-FC=gfortran
-FFLAGS="-O2 -fallow-argument-mismatch -std=legacy"
+# Find gfortran - on macOS with Homebrew it may be gfortran-XX
+if command -v gfortran &> /dev/null; then
+    FC=gfortran
+elif command -v gfortran-14 &> /dev/null; then
+    FC=gfortran-14
+elif command -v gfortran-13 &> /dev/null; then
+    FC=gfortran-13
+elif command -v gfortran-12 &> /dev/null; then
+    FC=gfortran-12
+else
+    # Try to find via Homebrew
+    if [ -d "/opt/homebrew/bin" ]; then
+        for f in /opt/homebrew/bin/gfortran-*; do
+            if [ -x "$f" ]; then
+                FC="$f"
+                break
+            fi
+        done
+    elif [ -d "/usr/local/bin" ]; then
+        for f in /usr/local/bin/gfortran-*; do
+            if [ -x "$f" ]; then
+                FC="$f"
+                break
+            fi
+        done
+    fi
+fi
+
+if [ -z "$FC" ]; then
+    echo "Error: gfortran not found. Install with: brew install gcc"
+    exit 1
+fi
+
+echo "Using Fortran compiler: $FC"
+FFLAGS="-O2 -std=legacy -w"
 SRCDIR=src
 GSLIBDIR=src/gslib
 BINDIR=../bin
