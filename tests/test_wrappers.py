@@ -209,7 +209,7 @@ class TestSgsim:
         # Different realizations should be different
         assert not np.allclose(result.realizations[0], result.realizations[1])
 
-    def test_sgsim_conditional(self, sample_data, simple_grid, spherical_variogram):
+    def test_sgsim_conditional(self, sample_data, spherical_variogram):
         """Test conditional simulation."""
         x = sample_data["x"]
         y = sample_data["y"]
@@ -219,9 +219,16 @@ class TestSgsim:
         # Transform to normal scores first
         ns_values, table = nscore(values)
 
+        # Use a grid that covers the sample data extent
+        cond_grid = GridSpec(
+            nx=10, ny=10, nz=2,
+            xmin=5.0, ymin=5.0, zmin=0.5,
+            xsiz=10.0, ysiz=10.0, zsiz=5.0,
+        )
+
         result = sgsim(
             x=x, y=y, z=z, values=ns_values,
-            grid=simple_grid,
+            grid=cond_grid,
             variogram=spherical_variogram,
             search_radius=(50.0, 50.0, 10.0),
             nrealizations=1,
@@ -229,7 +236,7 @@ class TestSgsim:
         )
 
         # Check output shape
-        assert result.realizations.shape == (1, simple_grid.nz, simple_grid.ny, simple_grid.nx)
+        assert result.realizations.shape == (1, cond_grid.nz, cond_grid.ny, cond_grid.nx)
 
 
 class TestSisim:

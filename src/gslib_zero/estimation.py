@@ -124,9 +124,8 @@ def kt3d(
         par.line(0, comment="debugging level (0=none)")
         par.line("kt3d_debug.dbg", comment="debug file")
         par.line("kt3d_output.out", comment="output file")
-        # Binary output flag - only for gslib-zero modified binaries
-        if binary:
-            par.line(1, comment="binary output (gslib-zero only)")
+        # Binary output flag: 0=ASCII, 1=binary (gslib-zero modified binaries)
+        par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
         par.line(grid.nx, grid.xmin, grid.xsiz, comment="nx, xmn, xsiz")
         par.line(grid.ny, grid.ymin, grid.ysiz, comment="ny, ymn, ysiz")
         par.line(grid.nz, grid.zmin, grid.zsiz, comment="nz, zmn, zsiz")
@@ -168,8 +167,27 @@ def kt3d(
             estimate = output_data[0]  # Already (nz, ny, nx)
             variance = output_data[1]
         else:
-            # ASCII output: gridded GSLIB format with estimate and variance columns
-            names, output_data, _grid_info = AsciiIO.read_gridded_data(output_file)
+            # ASCII output: kt3d has custom header format
+            # Line 1: title
+            # Line 2: nvars nx ny nz
+            # Lines 3+: variable names
+            # Rest: data
+            with open(output_file, "r") as f:
+                _title = f.readline()  # Skip title
+                header = f.readline().split()
+                nvars = int(header[0])
+                # Skip variable names
+                for _ in range(nvars):
+                    f.readline()
+                # Read data
+                rows = []
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        values = [float(x) for x in line.split()]
+                        rows.append(values)
+
+            output_data = np.array(rows, dtype=np.float64)
 
             # First column is estimate, second is variance
             estimate = output_data[:, 0]
