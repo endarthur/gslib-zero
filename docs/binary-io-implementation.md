@@ -339,14 +339,31 @@ When adding binary I/O to a new GSLIB program:
 - Header: `[4, 2, nz, ny, nx]`
 - Data interleaved: `[est1, var1, est2, var2, ...]`
 
-### sgsim (planned)
+### sgsim
 - Output: one value per cell per realization
 - Header: `[4, nsim, nz, ny, nx]`
 - Data: all cells for sim 1, then all cells for sim 2, etc.
+- **Important**: Data is written sequentially (sim1 cells, sim2 cells, ...), not interleaved.
+  Python must read flat data and reshape each realization separately with `order="F"`.
 
-### ik3d (planned)
-- Output: probability per cutoff per cell
+### sisim
+- Output: one simulated value per cell per realization
+- Header: `[4, nsim, nz, ny, nx]`
+- Data: all cells for sim 1, then all cells for sim 2, etc.
+- Same structure as sgsim - sequential realizations, not interleaved.
+
+### ik3d
+- Output: probability per cutoff per cell (order-relations corrected CDF/PDF)
 - Header: `[4, ncut, nz, ny, nx]`
+- Data: All ncut probabilities for cell 1, then cell 2, etc. (interleaved like kt3d)
+
+### gamv
+- Output: variogram statistics per lag per direction per variogram type
+- Header: `[4, 5, nvarg, ndir, nlag+2]`
+  - ndim=4, nfields=5 (dis, gam, np, hm, tm), nvarg variograms, ndir directions, nlag+2 lags
+- Data: For each variogram, for each direction, for each lag: 5 float32 values
+- **Note**: gamv has different output structure than grid-based programs
+- **Note**: nlag+2 lags are written (lag 0 through nlag+1), Python typically uses lags 1..nlag
 
 ---
 

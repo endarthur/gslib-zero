@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from gslib_zero.core import AsciiIO, GSLIBWorkspace, run_gslib
+from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib
 from gslib_zero.par import ParFileBuilder
 
 if TYPE_CHECKING:
@@ -79,6 +79,7 @@ def gamv(
     standardize_sill: bool = False,
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
+    binary: bool = False,
 ) -> list[VariogramResult]:
     """
     Calculate experimental variogram from sample data.
@@ -101,6 +102,7 @@ def gamv(
             8 or "semimadogram" = semimadogram
         standardize_sill: If True, standardize sill to 1.0
         tmin, tmax: Trimming limits
+        binary: If True, use binary I/O (requires gslib-zero modified binaries)
 
     Returns:
         List of VariogramResult objects, one per direction
@@ -151,6 +153,7 @@ def gamv(
         par.line(1, 4, comment="number of variables, column numbers")
         par.line(tmin, tmax, comment="trimming limits")
         par.line("gamv_output.out", comment="output file")
+        par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
         par.line(nlag, comment="number of lags")
         par.line(lag_distance, comment="lag distance")
         par.line(lag_tolerance, comment="lag tolerance")
@@ -171,43 +174,83 @@ def gamv(
         # Run gamv
         run_gslib("gamv", par_file)
 
-        # Read results - gamv output format:
-        # For each variogram/direction combination:
-        #   lag, distance, gamma, npairs, tail_mean, head_mean
-        output_lines = []
-        with open(output_file, "r") as f:
-            for line in f:
-                line = line.strip()
-                # Skip header lines and empty lines
-                if line and not line.startswith("G") and not line.startswith("v"):
-                    try:
-                        values_row = [float(v) for v in line.split()]
-                        if len(values_row) >= 4:  # At least lag, dist, gamma, npairs
-                            output_lines.append(values_row)
-                    except ValueError:
-                        continue
+        # Read results
+        if binary:
+            # Binary output: Header [ndim=4, nfields=5, nvarg, ndir, nlag+2]
+            # Data: 5 float32 values per lag (dis, gam, np, hm, tm)
+            with open(output_file, "rb") as f:
+                ndim = np.fromfile(f, dtype=np.int32, count=1)[0]
+                shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
+                # shape = (nfields=5, nvarg, ndir, nlag+2)
+                nfields, nvarg_out, ndir_out, nlags_out = shape
+                data = np.fromfile(f, dtype=np.float32)
 
-    # Parse results into VariogramResult objects
-    results = []
-    lines_per_dir = nlag
+            # Reshape data: (nfields, nvarg, ndir, nlag+2)
+            data = data.reshape(shape, order="F").astype(np.float64)
+            # data[0] = dis, data[1] = gam, data[2] = np, data[3] = hm, data[4] = tm
 
-    for i, direction in enumerate(directions):
-        start_idx = i * lines_per_dir
-        end_idx = start_idx + lines_per_dir
+            results = []
+            for i, direction in enumerate(directions):
+                # Extract data for this direction (variogram 0, direction i)
+                # Use first nlag lags (skip lag 0 which is at index 0, use indices 1:nlag+1)
+                # Actually gamv writes nlag+2 lags, we typically want lags 1 to nlag
+                lag_start = 1  # Skip lag 0
+                lag_end = nlag + 1
 
-        if end_idx <= len(output_lines):
-            dir_data = np.array(output_lines[start_idx:end_idx])
-
-            results.append(
-                VariogramResult(
-                    lag_distances=dir_data[:, 1].copy() if dir_data.shape[1] > 1 else dir_data[:, 0].copy(),
-                    gamma=dir_data[:, 2].copy() if dir_data.shape[1] > 2 else np.zeros(nlag),
-                    num_pairs=dir_data[:, 3].astype(np.int64) if dir_data.shape[1] > 3 else np.zeros(nlag, dtype=np.int64),
-                    tail_mean=dir_data[:, 4].copy() if dir_data.shape[1] > 4 else np.zeros(nlag),
-                    head_mean=dir_data[:, 5].copy() if dir_data.shape[1] > 5 else np.zeros(nlag),
-                    direction=(direction.azimuth, direction.dip),
-                    variogram_type=variogram_type,
+                results.append(
+                    VariogramResult(
+                        lag_distances=data[0, 0, i, lag_start:lag_end].copy(),
+                        gamma=data[1, 0, i, lag_start:lag_end].copy(),
+                        num_pairs=data[2, 0, i, lag_start:lag_end].astype(np.int64),
+                        tail_mean=data[3, 0, i, lag_start:lag_end].copy(),
+                        head_mean=data[4, 0, i, lag_start:lag_end].copy(),
+                        direction=(direction.azimuth, direction.dip),
+                        variogram_type=variogram_type,
+                    )
                 )
-            )
+        else:
+            # ASCII output format:
+            # For each variogram/direction combination:
+            #   Title line
+            #   nlag+2 lines: lag, distance, gamma, npairs, tail_mean, head_mean
+            output_lines = []
+            with open(output_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip header lines and empty lines
+                    if line and not line.startswith("G") and not line.startswith("v"):
+                        try:
+                            values_row = [float(v) for v in line.split()]
+                            if len(values_row) >= 4:  # At least lag, dist, gamma, npairs
+                                output_lines.append(values_row)
+                        except ValueError:
+                            continue
+
+            # Parse results into VariogramResult objects
+            results = []
+            # nlag+2 lines per direction in ASCII output
+            lines_per_dir = nlag + 2
+
+            for i, direction in enumerate(directions):
+                start_idx = i * lines_per_dir
+                end_idx = start_idx + lines_per_dir
+
+                if end_idx <= len(output_lines):
+                    dir_data = np.array(output_lines[start_idx:end_idx])
+                    # Use lags 1 to nlag (indices 1:nlag+1, skip lag 0)
+                    lag_start = 1
+                    lag_end = nlag + 1
+
+                    results.append(
+                        VariogramResult(
+                            lag_distances=dir_data[lag_start:lag_end, 1].copy() if dir_data.shape[1] > 1 else dir_data[lag_start:lag_end, 0].copy(),
+                            gamma=dir_data[lag_start:lag_end, 2].copy() if dir_data.shape[1] > 2 else np.zeros(nlag),
+                            num_pairs=dir_data[lag_start:lag_end, 3].astype(np.int64) if dir_data.shape[1] > 3 else np.zeros(nlag, dtype=np.int64),
+                            tail_mean=dir_data[lag_start:lag_end, 4].copy() if dir_data.shape[1] > 4 else np.zeros(nlag),
+                            head_mean=dir_data[lag_start:lag_end, 5].copy() if dir_data.shape[1] > 5 else np.zeros(nlag),
+                            direction=(direction.azimuth, direction.dip),
+                            variogram_type=variogram_type,
+                        )
+                    )
 
     return results

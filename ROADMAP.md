@@ -20,13 +20,13 @@ Extend binary I/O support to remaining programs. Pattern established with kt3d.
 | Program | Binary Output | Binary Input | Status |
 |---------|--------------|--------------|--------|
 | kt3d    | ✅ Done      | N/A          | Complete |
-| ik3d    | ⬜ Todo      | N/A          | - |
-| sgsim   | ⬜ Todo      | ⬜ Todo      | - |
-| sisim   | ⬜ Todo      | ⬜ Todo      | - |
-| gamv    | ⬜ Todo      | N/A          | - |
-| nscore  | ⬜ Todo      | N/A          | - |
-| backtr  | ⬜ Todo      | ⬜ Todo      | - |
-| declus  | ⬜ Todo      | N/A          | - |
+| ik3d    | ✅ Done      | N/A          | Complete |
+| sgsim   | ✅ Done      | ⬜ Todo      | Complete |
+| sisim   | ✅ Done      | ⬜ Todo      | Complete |
+| gamv    | ✅ Done      | N/A          | Complete |
+| nscore  | ✅ Done      | N/A          | Complete |
+| backtr  | ✅ Done      | N/A          | Complete |
+| declus  | ✅ Done      | N/A          | Complete |
 
 ### Binary Format Specification
 ```
@@ -35,6 +35,86 @@ Data:   [values: float32 × prod(shape)]
 ```
 
 For grid outputs (kt3d, sgsim, etc.): shape = (nvars, nz, ny, nx)
+
+### Fortran Source Changes Summary
+
+All changes are **minimal and limited to I/O**. No algorithm changes.
+
+#### kt3d.for / kt3d.inc
+- **kt3d.inc**: Added `ibinary` to `/datcom/` common block
+- **readparm**: Added `read(lin,*) ibinary` after output filename (line ~237)
+- **File open**: Conditional `access='STREAM',form='UNFORMATTED'` for binary mode
+- **Header write**: `write(lout) 4, 2, nz, ny, nx` (ndim, nvars, dimensions)
+- **Data write**: `write(lout) est, estv` instead of formatted write
+- **makepar**: Added ibinary parameter line
+
+#### sgsim.for / sgsim.inc
+- **sgsim.inc**: Added `ibinary` to `/generl/` common block
+- **readparm**: Added `read(lin,*) ibinary` after output filename
+- **File open**: Conditional stream/unformatted for binary mode
+- **Header write**: `write(lout) 4, nsim, nz, ny, nx`
+- **Data write**: `write(lout) simval` per cell (sequential by realization)
+- **makepar**: Added ibinary parameter line
+
+#### sisim.for / sisim.inc
+- **sisim.inc**: Added `ibinary` to `/simula/` common block
+- **readparm**: Added `read(lin,*) ibinary` after output filename
+- **File open**: Conditional stream/unformatted for binary mode
+- **Header write**: `write(lout) 4, nsim, nz, ny, nx`
+- **Data write**: `write(lout) sim(ind)` per cell
+- **makepar**: Added ibinary parameter line
+
+#### ik3d.for / ik3d.inc
+- **ik3d.inc**: Added `ibinary` to `/datcom/` common block
+- **readparm**: Added `read(lin,*) ibinary` after output filename
+- **File open**: Conditional stream/unformatted for binary mode
+- **Header write**: `write(lout) 4, ncut, nz, ny, nx`
+- **Data write**: `write(lout) (ccdfo(i),i=1,ncut)` per cell
+- **makepar**: Added ibinary parameter line
+
+#### gamv.for (uses module instead of .inc)
+- **geostat module**: Added `ibinary` to module variables
+- **readparm**: Added `read(lin,*) ibinary` after output filename
+- **File open**: Conditional stream/unformatted for binary mode in `writeout`
+- **Header write**: `write(lout) 4, 5, nvarg, ndir, nlag+2` (ndim, nfields, variogram dims)
+- **Data write**: `write(lout) real(dis),real(gam),real(np),real(hm),real(tm)` per lag
+- **makepar**: Added ibinary parameter line (format 150)
+- **Note**: gamv has different output structure (variograms, not grids)
+
+#### nscore.for (no .inc file, variables in main program)
+- **main program**: Added `ibinary` integer variable
+- **readparm**: Added `read(lin,*) ibinary` after output filename
+- **File open**: Conditional stream/unformatted for binary mode
+- **Header write**: `write(lout) 1, nout` (ndim=1, number of values)
+- **Data write**: `write(lout) real(vrg)` per value
+- **makepar**: Added ibinary parameter line (format 170)
+- **Note**: nscore outputs 1D array of normal scores, not echoing input in binary mode
+
+#### backtr.for (no .inc file, variables in main program)
+- **main program**: Added `ibinary` integer variable
+- **readparm**: Added `read(lin,*) ibinary` after output filename
+- **File open**: Conditional stream/unformatted for binary mode
+- **Header write**: `write(lout) 1, nout` (ndim=1, number of values)
+- **Data write**: `write(lout) bac` per value
+- **makepar**: Added ibinary parameter line (format 140)
+- **Note**: backtr outputs 1D array of back-transformed values, not echoing input in binary mode
+
+#### declus.for (no .inc file, variables in main program)
+- **main program**: Added `ibinary` integer variable
+- **readparm**: Added `read(lin,*) ibinary` after output filename
+- **File open**: Moved file open after counting data, conditional stream/unformatted for binary mode
+- **Header write**: `write(lout) 1, maxdat` (ndim=1, number of values)
+- **Data write**: `write(lout) thewt` per value (weight only in binary mode)
+- **makepar**: Added ibinary parameter line (format 150)
+- **Note**: declus outputs 1D array of declustering weights, not echoing input in binary mode
+
+#### Pattern for each program
+1. Add `ibinary` integer to appropriate common block in `.inc` file
+2. Read `ibinary` from par file after output filename
+3. Open output file with `access='STREAM',form='UNFORMATTED'` if binary
+4. Write binary header: `[ndim, dim1, dim2, ...]` as int32
+5. Write data as float32 (native Fortran `real`)
+6. Update `makepar` to include ibinary in example par file
 
 ---
 

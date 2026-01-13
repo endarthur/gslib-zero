@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from gslib_zero.core import AsciiIO, GSLIBWorkspace, run_gslib
+from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib
 from gslib_zero.par import ParFileBuilder
 
 if TYPE_CHECKING:
@@ -43,6 +43,7 @@ def declus(
     n_offsets: int = 8,
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
+    binary: bool = False,
 ) -> DeclusResult:
     """
     Cell declustering to compute sample weights.
@@ -59,6 +60,7 @@ def declus(
         n_offsets: Number of origin offsets to test
         tmin: Minimum trimming limit
         tmax: Maximum trimming limit
+        binary: If True, use binary I/O (requires gslib-zero modified binaries)
 
     Returns:
         DeclusResult with weights, declustered mean, and optimal cell size
@@ -85,7 +87,7 @@ def declus(
             title="declus input data",
         )
 
-        # Build par file - see declus.for lines 129-158
+        # Build par file - see declus.for lines 129-161
         par = ParFileBuilder()
         par.comment("Parameters for DECLUS")
         par.comment("*********************")
@@ -96,6 +98,7 @@ def declus(
         par.line(tmin, tmax, comment="trimming limits")
         par.line("declus_summary.out", comment="file for summary output")
         par.line("declus_output.dat", comment="file for output with weights")
+        par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
         par.line(anisotropy_y, anisotropy_z, comment="Y and Z anisotropy")
         par.line(min_max, comment="0=minimize mean, 1=maximize mean")
         par.line(n_cells, cell_min, cell_max, comment="ncell, cmin, cmax")
@@ -105,16 +108,24 @@ def declus(
         # Run declus
         run_gslib("declus", par_file)
 
-        # Read output - has columns: x, y, z, value, weight
-        names, output_data = AsciiIO.read_data(output_file)
+        # Read output weights
+        if binary:
+            # Binary output: header [ndim=1, n] + float32 weights
+            with open(output_file, "rb") as f:
+                ndim = np.fromfile(f, dtype=np.int32, count=1)[0]
+                shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
+                weights = np.fromfile(f, dtype=np.float32).astype(np.float64)
+        else:
+            # ASCII output - has columns: x, y, z, value, weight
+            names, output_data = AsciiIO.read_data(output_file)
 
-        # Find the weight column (usually last or contains 'wt')
-        wt_col = -1  # Default to last
-        for i, name in enumerate(names):
-            if "wt" in name.lower() or "weight" in name.lower():
-                wt_col = i
-                break
-        weights = output_data[:, wt_col]
+            # Find the weight column (usually last or contains 'wt')
+            wt_col = -1  # Default to last
+            for i, name in enumerate(names):
+                if "wt" in name.lower() or "weight" in name.lower():
+                    wt_col = i
+                    break
+            weights = output_data[:, wt_col]
 
         # Read summary file to get optimal cell size and declustered mean
         # Summary format: GSLIB header with columns (cell_size, declustered_mean)

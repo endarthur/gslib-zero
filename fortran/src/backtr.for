@@ -54,7 +54,7 @@ c     use       msflib  ! Removed for gfortran compatibility
       real      var(500),ltpar,utpar
       real*8    p
       character datafl*512,outfl*512,transfl*512,str*512
-      integer   ltail,utail,test
+      integer   ltail,utail,test,ibinary
       logical   testfl,getrank
       data      lin/1/,lout/2/
 c
@@ -117,6 +117,9 @@ c
       read(lin,'(a512)',err=98) outfl
       call chknam(outfl,512)
       write(*,*) ' output file = ',outfl(1:40)
+
+      read(lin,*,err=98) ibinary
+      write(*,*) ' binary output = ',ibinary
 
       read(lin,'(a512)',err=98) transfl
       call chknam(transfl,512)
@@ -241,16 +244,45 @@ c The data file exists so open the file and read in the header and
 c write a header on the output file:
 c
       open(lin,file=datafl, status='OLD')
-      open(lout,file=outfl,status='UNKNOWN')
-      read(lin,'(a40)',err=99) str(1:40)
-      write(lout,100)          str(1:40)
-      read(lin,*,err=99)       nvari
-      write(lout,'(i2)')       nvari+1
-      do i=1,nvari
+c
+c Open output file (binary or ASCII mode):
+c
+      if(ibinary.eq.1) then
+c           Binary mode: first count output lines
             read(lin,'(a40)',err=99) str(1:40)
-            write(lout,'(a40)')      str(1:40)
-      end do
-      write(lout,101)
+            read(lin,*,err=99) nvari
+            do i=1,nvari
+                  read(lin,*)
+            end do
+            nout = 0
+ 5          read(lin,*,end=6,err=99) (var(i),i=1,nvari)
+            nout = nout + 1
+            go to 5
+ 6          continue
+            rewind(lin)
+c           Re-read header
+            read(lin,'(a40)',err=99) str(1:40)
+            read(lin,*,err=99) nvari
+            do i=1,nvari
+                  read(lin,*)
+            end do
+c           Open binary file and write header
+            open(lout,file=outfl,status='UNKNOWN',
+     +           access='STREAM',form='UNFORMATTED')
+            write(lout) 1, nout
+      else
+c           ASCII mode: standard formatted output
+            open(lout,file=outfl,status='UNKNOWN')
+            read(lin,'(a40)',err=99) str(1:40)
+            write(lout,100)          str(1:40)
+            read(lin,*,err=99)       nvari
+            write(lout,'(i2)')       nvari+1
+            do i=1,nvari
+                  read(lin,'(a40)',err=99) str(1:40)
+                  write(lout,'(a40)')      str(1:40)
+            end do
+            write(lout,101)
+      end if
  100  format('Back Transform:',a40)
  101  format('Back Transform')
 c
@@ -267,10 +299,16 @@ c
 c
 c Write out the results:
 c
-      backspace lin
-      read(lin,'(a)') str
-      call strlen(str,MAXLEN,lostr)
-      write(lout,'(a,1x,g14.8)') str(1:lostr),bac
+      if(ibinary.eq.1) then
+c           Binary output: just write back-transformed value
+            write(lout) bac
+      else
+c           ASCII output: echo input with back-transformed value
+            backspace lin
+            read(lin,'(a)') str
+            call strlen(str,MAXLEN,lostr)
+            write(lout,'(a,1x,g14.8)') str(1:lostr),bac
+      end if
       go to 7
  8    continue
 c
@@ -314,6 +352,9 @@ c-----------------------------------------------------------------------
       write(lun,14)
  14   format('backtr.out                    ',
      +       '-file for output')
+      write(lun,140)
+ 140  format('0                             ',
+     +       '-binary output (0=no, 1=yes)')
       write(lun,15)
  15   format('nscore.trn                    ',
      +       '-file with input transformation table')

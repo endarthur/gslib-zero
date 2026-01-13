@@ -202,6 +202,15 @@ def kt3d(
     return KrigingResult(estimate=estimate, variance=variance, grid=grid)
 
 
+@dataclass
+class IndicatorKrigingResult:
+    """Result from indicator kriging estimation."""
+
+    probabilities: NDArray[np.float64]  # Shape (ncut, nz, ny, nx)
+    cutoffs: list[float]
+    grid: GridSpec
+
+
 def ik3d(
     x: NDArray[np.floating],
     y: NDArray[np.floating],
@@ -209,11 +218,17 @@ def ik3d(
     values: NDArray[np.floating],
     grid: GridSpec,
     cutoffs: list[float],
+    global_cdf: list[float],
     variograms: list[VariogramModel],
     search: SearchParameters,
+    kriging_type: Literal["simple", "ordinary"] = "ordinary",
+    indicator_type: Literal["continuous", "categorical"] = "continuous",
+    median_ik: bool = False,
+    median_cutoff_index: int = 0,
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
-) -> NDArray[np.float64]:
+    binary: bool = False,
+) -> IndicatorKrigingResult:
     """
     Indicator kriging using ik3d.
 
@@ -222,12 +237,18 @@ def ik3d(
         values: Sample values (1D array)
         grid: Grid specification for output
         cutoffs: List of indicator cutoff values
+        global_cdf: Global CDF/PDF values for each cutoff (same length as cutoffs)
         variograms: List of variogram models, one per cutoff
         search: Search neighborhood parameters
+        kriging_type: 'simple' or 'ordinary' kriging
+        indicator_type: 'continuous' (CDF) or 'categorical' (PDF)
+        median_ik: If True, use median indicator kriging (faster)
+        median_cutoff_index: Cutoff index to use for median IK (0-based)
         tmin, tmax: Trimming limits
+        binary: If True, use binary I/O (requires gslib-zero modified binaries)
 
     Returns:
-        Array of shape (ncut, nz, ny, nx) with indicator kriging estimates
+        IndicatorKrigingResult with probabilities array of shape (ncut, nz, ny, nx)
     """
     x = np.asarray(x, dtype=np.float64).ravel()
     y = np.asarray(y, dtype=np.float64).ravel()
@@ -239,6 +260,15 @@ def ik3d(
 
     if len(variograms) != ncut:
         raise ValueError(f"Need {ncut} variograms for {ncut} cutoffs")
+    if len(global_cdf) != ncut:
+        raise ValueError(f"Need {ncut} global CDF values for {ncut} cutoffs")
+
+    # GSLIB codes
+    ivtype = 1 if indicator_type == "continuous" else 0
+    ktype = 0 if kriging_type == "simple" else 1
+    mik = 1 if median_ik else 0
+    # GSLIB uses 1-based cutoff index for median IK
+    cutmik = cutoffs[median_cutoff_index] if median_ik else cutoffs[0]
 
     with GSLIBWorkspace() as workspace:
         data_file = workspace / "ik3d_input.dat"
@@ -246,36 +276,47 @@ def ik3d(
         debug_file = workspace / "ik3d_debug.dbg"
         par_file = workspace / "ik3d.par"
 
-        # Write input data
+        # Write input data with drillhole ID column
+        dhid = np.arange(1, n + 1, dtype=np.float64)
         AsciiIO.write_data(
             data_file,
-            {"x": x, "y": y, "z": z, "value": values},
+            {"dhid": dhid, "x": x, "y": y, "z": z, "value": values},
             title="ik3d input data",
         )
 
-        # Build par file - simplified version
+        # Build par file - following ik3d.for readparm order
         par = ParFileBuilder()
         par.comment("Parameters for IK3D")
         par.comment("*******************")
         par.blank()
         par.line("START OF PARAMETERS:")
+        par.line(ivtype, comment="1=continuous(cdf), 0=categorical(pdf)")
+        par.line(0, comment="option: 0=grid, 1=cross, 2=jackknife")
+        par.line("nofile.dat", comment="jackknife file (not used)")
+        par.line(1, 2, 3, 4, comment="jackknife columns (not used)")
+        par.line(ncut, comment="number of thresholds/categories")
+        # Thresholds on single line
+        par.line(*cutoffs, comment="thresholds/categories")
+        # Global CDF/PDF on single line
+        par.line(*global_cdf, comment="global cdf/pdf")
         par.line("ik3d_input.dat", comment="data file")
-        par.line(1, 2, 3, 4, comment="columns: x, y, z, var")
+        par.line(1, 2, 3, 4, 5, comment="columns: DH, x, y, z, var")
+        par.line("nofile.dat", comment="soft indicator file (not used)")
+        par.line(1, 2, 3, *range(4, 4 + ncut), comment="soft columns (not used)")
         par.line(tmin, tmax, comment="trimming limits")
-        par.line(ncut, comment="number of cutoffs")
-        for cut in cutoffs:
-            par.line(cut)
         par.line(0, comment="debugging level")
         par.line("ik3d_debug.dbg", comment="debug file")
         par.line("ik3d_output.out", comment="output file")
+        par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
         par.line(grid.nx, grid.xmin, grid.xsiz, comment="nx, xmn, xsiz")
         par.line(grid.ny, grid.ymin, grid.ysiz, comment="ny, ymn, ysiz")
         par.line(grid.nz, grid.zmin, grid.zsiz, comment="nz, zmn, zsiz")
-        par.line(1, 1, 1, comment="block discretization")
         par.line(search.min_samples, search.max_samples, comment="min, max data")
-        par.line(search.max_per_octant, comment="max per octant")
         par.line(search.radius1, search.radius2, search.radius3, comment="search radii")
         par.line(search.azimuth, search.dip, search.rake, comment="search angles")
+        par.line(search.max_per_octant, comment="max per octant")
+        par.line(mik, cutmik, comment="0=full IK, 1=median IK (cutoff value)")
+        par.line(ktype, comment="0=SK, 1=OK")
 
         # Variogram models for each cutoff
         for i, vario in enumerate(variograms):
@@ -295,13 +336,44 @@ def ik3d(
         run_gslib("ik3d", par_file)
 
         # Read results
-        names, output_data = AsciiIO.read_data(output_file)
+        if binary:
+            # Binary output: 4D array (ncut, nz, ny, nx)
+            with open(output_file, "rb") as f:
+                ndim = np.fromfile(f, dtype=np.int32, count=1)[0]
+                shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
+                ncut_actual = shape[0]
+                values_flat = np.fromfile(f, dtype=np.float32)
 
-        # Reshape: one column per cutoff
-        shape = (ncut, grid.nz, grid.ny, grid.nx)
-        result = np.zeros(shape, dtype=np.float64)
+            # Reshape with F-order to match other GSLIB programs (kt3d, sgsim, etc.)
+            # Data is ncut values per cell, so reshape to (ncut, nz, ny, nx)
+            result = values_flat.reshape(
+                (ncut_actual, grid.nz, grid.ny, grid.nx), order="F"
+            ).astype(np.float64)
+        else:
+            # ASCII output: custom header format for ik3d
+            with open(output_file, "r") as f:
+                _title = f.readline()  # Skip title
+                _header = f.readline()  # Skip header line
+                # Skip cutoff labels
+                for _ in range(ncut):
+                    f.readline()
+                # Read data
+                rows = []
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        row_values = [float(val) for val in line.split()]
+                        rows.append(row_values)
 
-        for i in range(min(ncut, output_data.shape[1])):
-            result[i] = output_data[:, i].reshape((grid.nz, grid.ny, grid.nx), order="F")
+            output_data = np.array(rows, dtype=np.float64)
 
-    return result
+            # Reshape with F-order to match other GSLIB programs
+            result = np.zeros((ncut, grid.nz, grid.ny, grid.nx), dtype=np.float64)
+            for i in range(min(ncut, output_data.shape[1])):
+                result[i] = output_data[:, i].reshape(
+                    (grid.nz, grid.ny, grid.nx), order="F"
+                )
+
+    return IndicatorKrigingResult(
+        probabilities=result, cutoffs=list(cutoffs), grid=grid
+    )

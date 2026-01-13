@@ -55,7 +55,8 @@ c
       common /generl/ nsim,nx,ny,nz,xsiz,ysiz,zsiz,xmn,ymn,zmn,nxy,nxyz,
      +                nd,itrans,ntr,idbg,lin,lout,ldbg,llvm,icollvm,
      +                nvaril,ktype,colocorr,test,
-     +                ltail,ltpar,utail,utpar,zmin,zmax,varred
+     +                ltail,ltpar,utail,utpar,zmin,zmax,varred,
+     +                ibinary
 
       common /search/ radius,radsqd,sang1,sang2,sang3,sanis1,sanis2,
      +                noct,nclose,ndmin,ndmax,sstrat,mults,nmult,

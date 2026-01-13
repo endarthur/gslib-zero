@@ -24,6 +24,7 @@ def nscore(
     weights: NDArray[np.floating] | None = None,
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
+    binary: bool = False,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """
     Apply normal score transform to data.
@@ -37,6 +38,7 @@ def nscore(
                  If None, uniform weights are used.
         tmin: Minimum trimming limit (values below are excluded)
         tmax: Maximum trimming limit (values above are excluded)
+        binary: If True, use binary I/O (requires gslib-zero modified binaries)
 
     Returns:
         Tuple of (transformed_data, transform_table) where:
@@ -83,6 +85,7 @@ def nscore(
         par.line("nscore_input.dat", comment="file with reference distribution (not used)")
         par.line(1, 2, comment="columns for variable and weight (not used)")
         par.line("nscore_output.dat", comment="file for output")
+        par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
         par.line("nscore_transform.trn", comment="file for transformation table")
         par.write(par_file)
 
@@ -90,18 +93,26 @@ def nscore(
         run_gslib("nscore", par_file)
 
         # Read results
-        # Output file has GSLIB format with columns: value, weight, nscore
-        names, output_data = AsciiIO.read_data(output_file)
+        if binary:
+            # Binary output: header [ndim=1, n] + float32 values
+            with open(output_file, "rb") as f:
+                ndim = np.fromfile(f, dtype=np.int32, count=1)[0]
+                shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
+                transformed = np.fromfile(f, dtype=np.float32).astype(np.float64)
+        else:
+            # ASCII output: GSLIB format with columns including nscore
+            names, output_data = AsciiIO.read_data(output_file)
 
-        # Find the nscore column (usually last, may have prefix like "NS:")
-        ns_col = -1  # Default to last column
-        for i, name in enumerate(names):
-            if "nscore" in name.lower() or name.startswith("NS:"):
-                ns_col = i
-                break
-        transformed = output_data[:, ns_col]
+            # Find the nscore column (usually last, may have prefix like "NS:")
+            ns_col = -1  # Default to last column
+            for i, name in enumerate(names):
+                if "nscore" in name.lower() or name.startswith("NS:"):
+                    ns_col = i
+                    break
+            transformed = output_data[:, ns_col]
 
         # Read transform table (raw format: value, nscore - no header)
+        # Transform table is always ASCII
         table_data = AsciiIO.read_raw(transform_file)
 
     return transformed, table_data
@@ -118,6 +129,7 @@ def backtr(
     ltpar: float = 1.0,
     utail: int = 1,
     utpar: float = 1.0,
+    binary: bool = False,
 ) -> NDArray[np.float64]:
     """
     Back-transform normal scores to original distribution.
@@ -133,6 +145,7 @@ def backtr(
         ltpar: Lower tail parameter
         utail: Upper tail extrapolation option (1=linear, 2=power, 4=hyperbolic)
         utpar: Upper tail parameter
+        binary: If True, use binary I/O (requires gslib-zero modified binaries)
 
     Returns:
         Back-transformed data in original units
@@ -171,6 +184,7 @@ def backtr(
         par.line(1, comment="column for variable")
         par.line(tmin, tmax, comment="trimming limits")
         par.line("backtr_output.dat", comment="file for output")
+        par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
         par.line("backtr_table.trn", comment="file with transformation table")
         par.line(zmin, zmax, comment="minimum and maximum Z values")
         par.line(ltail, ltpar, comment="lower tail option and parameter")
@@ -180,8 +194,16 @@ def backtr(
         # Run backtr
         run_gslib("backtr", par_file)
 
-        # Read results - output has 2 columns: original nscore, back-transformed
-        # We want the second column (index 1)
-        result = AsciiIO.read_column(output_file, column=1)
+        # Read results
+        if binary:
+            # Binary output: header [ndim=1, n] + float32 values
+            with open(output_file, "rb") as f:
+                ndim = np.fromfile(f, dtype=np.int32, count=1)[0]
+                shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
+                result = np.fromfile(f, dtype=np.float32).astype(np.float64)
+        else:
+            # ASCII output: has 2 columns (original nscore, back-transformed)
+            # We want the second column (index 1)
+            result = AsciiIO.read_column(output_file, column=1)
 
     return result

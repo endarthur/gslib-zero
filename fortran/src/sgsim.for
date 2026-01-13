@@ -200,6 +200,9 @@ c
       call chknam(outfl,512)
       write(*,*) ' output file ',outfl(1:40)
 
+      read(lin,*,err=98) ibinary
+      write(*,*) ' binary output = ',ibinary
+
       read(lin,*,err=98) nsim
       write(*,*) ' number of realizations = ',nsim
 
@@ -987,13 +990,22 @@ c
 c
 c Open the output file:
 c
-      open(lout,file=outfl,status='UNKNOWN')
-      write(lout,210)
- 210  format('SGSIM Realizations')
-      write(lout,211) 1,nx,ny,nz,xmn,ymn,zmn,xsiz,ysiz,zsiz,nsim
- 211  format(i2,3(1x,i4),3(1x,g14.8),3(1x,g12.6),i4) 
-      write(lout,212)
- 212  format('value')
+      if(ibinary.eq.1) then
+c           Binary mode: stream access, unformatted
+            open(lout,file=outfl,status='UNKNOWN',
+     +           access='STREAM',form='UNFORMATTED')
+c           Write header: ndim=4, nsim, nz, ny, nx
+            write(lout) 4, nsim, nz, ny, nx
+      else
+c           ASCII mode: standard formatted output
+            open(lout,file=outfl,status='UNKNOWN')
+            write(lout,210)
+ 210        format('SGSIM Realizations')
+            write(lout,211) 1,nx,ny,nz,xmn,ymn,zmn,xsiz,ysiz,zsiz,nsim
+ 211        format(i2,3(1x,i4),3(1x,g14.8),3(1x,g12.6),i4)
+            write(lout,212)
+ 212        format('value')
+      end if
       return
 c
 c Error in an Input File Somewhere:
@@ -1376,7 +1388,11 @@ c
                         if(simval.lt.zmin) simval = zmin
                         if(simval.gt.zmax) simval = zmax
                   end if
-                  write(lout,'(g14.8)') simval
+                  if(ibinary.eq.1) then
+                        write(lout) simval
+                  else
+                        write(lout,'(g14.8)') simval
+                  end if
             end do
             av = av / max(real(ne),1.0)
             ss =(ss / max(real(ne),1.0)) - av * av
@@ -1996,6 +2012,9 @@ c-----------------------------------------------------------------------
       write(lun,24)
  24   format('sgsim.out                     ',
      +       '-file for simulation output')
+      write(lun,241)
+ 241  format('0                             ',
+     +       '-binary output (0=no, 1=yes)')
       write(lun,25)
  25   format('1                             ',
      +       '-number of realizations to generate')

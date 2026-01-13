@@ -213,6 +213,7 @@ tmpclaude-*
 nul
 
 # Fortran build artifacts
-fortran/*.o
-fortran/*.mod
+fortran/**/*.o
+fortran/**/*.mod
+fortran/*.txt
 *.exe

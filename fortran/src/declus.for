@@ -76,7 +76,7 @@ c     use       msflib  ! Removed for gfortran compatibility
       parameter(MAXLEN=512,VERSION=3.000)
 
       real      var(500)
-      integer   test
+      integer   test,ibinary
       character datafl*512,sumfl*512,outfl*512,str*512,strlin*512
       logical   min,testfl
       data      xmin/ 1.0e21/,ymin/ 1.0e21/,zmin/ 1.0e21/,
@@ -140,9 +140,12 @@ c
       call chknam(sumfl,512)
       write(*,*) ' summary file = ',sumfl(1:40)
 
-      read(lin,'(a512)',err=97) outfl 
+      read(lin,'(a512)',err=97) outfl
       call chknam(outfl,512)
       write(*,*) ' output file = ',outfl(1:40)
+
+      read(lin,*,err=97) ibinary
+      write(*,*) ' binary output = ',ibinary
 
       read(lin,*,err=97) anisy,anisz
       write(*,*) ' anisotropy = ',anisy,anisz
@@ -173,7 +176,7 @@ c Open up the input and output files:
 c
       open(lin,file=datafl,status='OLD')
       open(lsum,file=sumfl,status='UNKNOWN')
-      open(lout,file=outfl,status='UNKNOWN')
+c     Note: lout will be opened later after counting data points
 c
 c Read the header off the data file, find MAXDAT and 
 c prepare the output files:
@@ -241,17 +244,30 @@ c
             stop
       end if
 c
+c Open output file and write header (binary or ASCII mode):
+c
+      if(ibinary.eq.1) then
+c           Binary mode: stream access, unformatted
+            open(lout,file=outfl,status='UNKNOWN',
+     +           access='STREAM',form='UNFORMATTED')
+c           Write header: ndim=1, nout=maxdat
+            write(lout) 1, maxdat
+      else
+c           ASCII mode: standard formatted output
+            open(lout,file=outfl,status='UNKNOWN')
+      end if
+c
       rewind(lin)
       read(lin,'(a40)',err=98) str
-      write(lout,'(a40)') str
+      if(ibinary.eq.0) write(lout,'(a40)') str
       write(lsum,'(a40)') str
       read(lin,*,err=98) nvari
-      write(lout,'(i3)') nvari+1
+      if(ibinary.eq.0) write(lout,'(i3)') nvari+1
       do i=1,nvari
             read(lin,'(a40)',err=98) str
-            write(lout,'(a40)')      str
+            if(ibinary.eq.0) write(lout,'(a40)') str
       end do
-      write(lout,101)
+      if(ibinary.eq.0) write(lout,101)
  101  format('Declustering Weight')
       write(lsum,102)
  102  format('2',/,'Cell Size',/,'Declustered Mean')
@@ -505,10 +521,16 @@ c
 c
 c Write out the results:
 c
-      backspace lin
-      read(lin,'(a)') strlin
-      call strlen(strlin,MAXLEN,lostr)
-      write(lout,'(a,1x,g14.8)') strlin(1:lostr),thewt
+      if(ibinary.eq.1) then
+c           Binary output: just write the weight
+            write(lout) thewt
+      else
+c           ASCII output: echo input with weight appended
+            backspace lin
+            read(lin,'(a)') strlin
+            call strlen(strlin,MAXLEN,lostr)
+            write(lout,'(a,1x,g14.8)') strlin(1:lostr),thewt
+      end if
       go to 5
  6    continue
       if(nd.ne.nd2) then
@@ -569,6 +591,9 @@ c-----------------------------------------------------------------------
       write(lun,15)
  15   format('declus.out                  ',
      +       '-file for output with data & weights')
+      write(lun,150)
+ 150  format('0                           ',
+     +       '-binary output (0=no, 1=yes)')
       write(lun,16)
  16   format('1.0   1.0                   ',
      +       '-Y and Z cell anisotropy (Ysize=size*Yanis)')

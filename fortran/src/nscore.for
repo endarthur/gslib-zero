@@ -53,7 +53,7 @@ c
       character datafl*512,outfl*512,smthfl*512,transfl*512,tmpfl*512,
      +          str*512,namest*40
       logical   testfl,getrank
-      integer   test
+      integer   test,ibinary
       common /iaco/   ixv(MAXOP1)
 
       data      lin/1/,lout/2/,doubone/1.0/
@@ -127,6 +127,9 @@ c
       read(lin,'(a512)',err=98) outfl
       call chknam(outfl,512)
       write(*,*) ' file for output = ',outfl(1:40)
+
+      read(lin,*,err=98) ibinary
+      write(*,*) ' binary output = ',ibinary
 
       read(lin,'(a512)',err=98) transfl
       call chknam(transfl,512)
@@ -294,17 +297,56 @@ c
       do i=1,1000
             p = real(acorni(idum))
       end do
-      open(lout,file=outfl, status='UNKNOWN')
-      read(lin,'(a40)',err=99) str(1:40)
-      write(lout,100)          str(1:40)
-      read(lin,*,err=99)       nvari
-      write(lout,'(i2)')       nvari+1
-      do i=1,nvari
+c
+c Open output file (binary or ASCII mode):
+c
+      if(ibinary.eq.1) then
+c           Binary mode: stream access, unformatted
+c           First count the number of output values
             read(lin,'(a40)',err=99) str(1:40)
-            write(lout,'(a40)')      str(1:40)
-            if(i.eq.ivr) namest = str(1:40)
-      end do
-      write(lout,101) namest
+            read(lin,*,err=99) nvari
+            do i=1,nvari
+                  read(lin,*)
+            end do
+            nout = 0
+ 5          read(lin,*,end=6) (var(i),i=1,nvari)
+            nout = nout + 1
+            go to 5
+ 6          continue
+            rewind(lin)
+c           Re-read header
+            read(lin,'(a40)',err=99) str(1:40)
+            read(lin,*,err=99) nvari
+            do i=1,nvari
+                  read(lin,'(a40)',err=99) str(1:40)
+                  if(i.eq.ivr) namest = str(1:40)
+            end do
+c           Reset RNG for consistent results
+            do i=1,MAXOP1
+                  ixv(i) = 0.0
+            end do
+            ixv(1) = 69069
+            do i=1,1000
+                  p = real(acorni(idum))
+            end do
+c           Open binary file and write header
+            open(lout,file=outfl,status='UNKNOWN',
+     +           access='STREAM',form='UNFORMATTED')
+            write(lout) 1, nout
+      else
+c           ASCII mode: standard formatted output
+            open(lout,file=outfl, status='UNKNOWN')
+            read(lin,'(a40)',err=99) str(1:40)
+            write(lout,100)          str(1:40)
+            read(lin,*,err=99)       nvari
+            write(lout,'(i2)')       nvari+1
+            do i=1,nvari
+                  read(lin,'(a40)',err=99) str(1:40)
+                  write(lout,'(a40)')      str(1:40)
+                  if(i.eq.ivr) namest = str(1:40)
+            end do
+            write(lout,101) namest
+      end if
  100  format('Normal Score Transform:',a40)
  101  format('NS:',a40)
 c
@@ -320,7 +362,7 @@ c
       else
             vrr = dble(var(ivr))+acorni(idum)*dble(EPSLON)
 c
-c Now, get the normal scores value for "vrr" 
+c Now, get the normal scores value for "vrr"
 c
             call dlocate(vr,nd,1,nd,vrr,j)
             j   = min(max(1,j),(nd-1))
@@ -337,10 +379,16 @@ c
 c
 c Write out the results:
 c
-      backspace lin
-      read(lin,'(a)') str
-      call strlen(str,MAXLEN,lostr)
-      write(lout,'(a,1x,f12.5)') str(1:lostr),real(vrg)
+      if(ibinary.eq.1) then
+c           Binary output: just write normal score value as float32
+            write(lout) real(vrg)
+      else
+c           ASCII output: echo input line with normal score appended
+            backspace lin
+            read(lin,'(a)') str
+            call strlen(str,MAXLEN,lostr)
+            write(lout,'(a,1x,f12.5)') str(1:lostr),real(vrg)
+      end if
       go to 7
  9    continue
 c
@@ -394,6 +442,9 @@ c-----------------------------------------------------------------------
       write(lun,17)
  17   format('nscore.out               ',
      +       '-file for output')
+      write(lun,170)
+ 170  format('0                        ',
+     +       '-binary output (0=no, 1=yes)')
       write(lun,18)
  18   format('nscore.trn               ',
      +       '-file for output transformation table')

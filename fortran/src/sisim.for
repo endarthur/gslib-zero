@@ -385,6 +385,9 @@ c
       call chknam(outfl,512)
       write(*,*) ' output file = ',outfl(1:40)
 
+      read(lin,*,err=98) ibinary
+      write(*,*) ' binary output = ',ibinary
+
       read(lin,*,err=98) nsim
       write(*,*) ' number of simulations = ',nsim
 
@@ -1063,13 +1066,22 @@ c
 c
 c Open the output file and return:
 c
-      open(lout,file=outfl,status='UNKNOWN')
-      write(lout,104) title
- 104  format(a80)
-      write(lout,105) 1,nx,ny,nz,xmn,ymn,zmn,xsiz,ysiz,zsiz,nsim
- 105  format(i2,3(1x,i4),3(1x,g14.8),3(1x,g12.6),i4) 
-      write(lout,106)
- 106  format('Simulated Value')
+      if(ibinary.eq.1) then
+c           Binary mode: stream access, unformatted
+            open(lout,file=outfl,status='UNKNOWN',
+     +           access='STREAM',form='UNFORMATTED')
+c           Write header: ndim=4, nsim, nz, ny, nx
+            write(lout) 4, nsim, nz, ny, nx
+      else
+c           ASCII mode: standard formatted output
+            open(lout,file=outfl,status='UNKNOWN')
+            write(lout,104) title
+ 104        format(a80)
+            write(lout,105) 1,nx,ny,nz,xmn,ymn,zmn,xsiz,ysiz,zsiz,nsim
+ 105        format(i2,3(1x,i4),3(1x,g14.8),3(1x,g12.6),i4)
+            write(lout,106)
+ 106        format('Simulated Value')
+      end if
       return
 c
 c Error in an Input File Somewhere:
@@ -1366,7 +1378,11 @@ c
                   ccdf(ic) = 0.0
             end do
             do ind=1,nxyz
-                  write(lout,'(g14.8)') sim(ind)
+                  if(ibinary.eq.1) then
+                        write(lout) sim(ind)
+                  else
+                        write(lout,'(g14.8)') sim(ind)
+                  end if
 c
 c Calculate the cdf of the simulated values (for error checking):
 c
@@ -2020,6 +2036,9 @@ c-----------------------------------------------------------------------
       write(lun,30)
  30   format('sisim.out                     ',
      +       '-file for simulation output')
+      write(lun,301)
+ 301  format('0                             ',
+     +       '-binary output (0=no, 1=yes)')
       write(lun,31)
  31   format('1                             ',
      +       '-number of realizations')

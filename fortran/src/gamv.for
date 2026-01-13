@@ -39,9 +39,9 @@ c
 
       real      EPSLON,VERSION
       real      xlag,xltol,tmin,tmax
-      integer   nd,nlag,ndir,nvarg,isill,test
+      integer   nd,nlag,ndir,nvarg,isill,test,ibinary
       character outfl*512
-      
+
       end module
 c
 c
@@ -186,6 +186,9 @@ c
       read(lin,'(a512)',err=98) outfl
       call chknam(outfl,512)
       write(*,*) ' output file = ',outfl(1:40)
+
+      read(lin,*,err=98) ibinary
+      write(*,*) ' binary output = ',ibinary
 
       read(lin,*,err=98) nlag
       write(*,*) ' number of lags = ',nlag
@@ -1080,9 +1083,19 @@ c-----------------------------------------------------------------------
       character title*132
       data      lout/1/
 c
-c Loop over all the variograms that have been computed:
+c Open output file (binary or ASCII mode):
 c
-      open(lout,file=outfl,status='UNKNOWN')
+      if(ibinary.eq.1) then
+c           Binary mode: stream access, unformatted
+            open(lout,file=outfl,status='UNKNOWN',
+     +           access='STREAM',form='UNFORMATTED')
+c           Write header: ndim=4, nfields=5, nvarg, ndir, nlag+2
+c           Fields: dis, gam, np, hm, tm (5 values per lag)
+            write(lout) 4, 5, nvarg, ndir, nlag+2
+      else
+c           ASCII mode: standard formatted output
+            open(lout,file=outfl,status='UNKNOWN')
+      end if
       do iv=1,nvarg
 c
 c Construct a title that reflects the variogram type and the variables
@@ -1105,22 +1118,32 @@ c
 c Loop over all the directions (note the direction in the title):
 c
       do id=1,ndir
-            write(title(62:74),101) id
- 101        format('direction ',i2)
-            write(lout,'(a74)') title(1:74)
+            if(ibinary.eq.0) then
+                  write(title(62:74),101) id
+ 101              format('direction ',i2)
+                  write(lout,'(a74)') title(1:74)
+            end if
 c
 c Write out all the lags:
 c
             do il=1,nlag+2
                   i = (id-1)*nvarg*(nlag+2)+(iv-1)*(nlag+2)+il
                   nump = int(np(i))
-                  if(it.eq.4) then
-                        write(lout,102) il,dis(i),gam(i),nump,
-     +                                  hm(i),tm(i),hv(i),tv(i)
+                  if(ibinary.eq.1) then
+c                       Binary output: write 5 values as float32
+c                       dis, gam, npairs(as real), hm, tm
+                        write(lout) real(dis(i)),real(gam(i)),
+     +                              real(np(i)),real(hm(i)),real(tm(i))
                   else
-                        write(lout,102) il,dis(i),gam(i),nump,
-     +                                  hm(i),tm(i)
-                  endif
+c                       ASCII output: formatted
+                        if(it.eq.4) then
+                              write(lout,102) il,dis(i),gam(i),nump,
+     +                                        hm(i),tm(i),hv(i),tv(i)
+                        else
+                              write(lout,102) il,dis(i),gam(i),nump,
+     +                                        hm(i),tm(i)
+                        endif
+                  end if
  102              format(1x,i3,1x,f12.3,1x,f12.5,1x,i8,4(1x,f14.5))
             end do
       end do
@@ -1263,6 +1286,9 @@ c-----------------------------------------------------------------------
       write(lun,15)
  15   format('gamv.out                          ',
      +       '-file for variogram output')
+      write(lun,150)
+ 150  format('0                                 ',
+     +       '-binary output (0=no, 1=yes)')
       write(lun,16)
  16   format('10                                ',
      +       '-number of lags')

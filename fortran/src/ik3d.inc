@@ -40,7 +40,7 @@ c
      +                ndmax,ndmin,radius,sang1,sang2,sang3,sanis1,
      +                sanis2,isrot,ivrot,mik,ktype,noct,idbg,
      +                ldbg,iout,lout,tmin,tmax,ivtype,koption,
-     +                idhl,idhlj,test
+     +                idhl,idhlj,test,ibinary
 c
 c Search variables and data for kriging:
 c

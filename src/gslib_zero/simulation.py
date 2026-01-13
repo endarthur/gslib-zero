@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from gslib_zero.core import AsciiIO, GSLIBWorkspace, run_gslib
+from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib
 from gslib_zero.par import ParFileBuilder
 from gslib_zero.utils import GridSpec, VariogramModel
 
@@ -47,6 +47,7 @@ def sgsim(
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
     search_angles: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    binary: bool = False,
 ) -> SimulationResult:
     """
     Sequential Gaussian simulation using sgsim.
@@ -69,6 +70,7 @@ def sgsim(
         sk_mean: Mean for simple kriging (usually 0 for normal scores)
         tmin, tmax: Trimming limits
         search_angles: Search anisotropy angles (azm, dip, rake)
+        binary: If True, use binary I/O (faster for large grids)
 
     Returns:
         SimulationResult with realizations array
@@ -137,6 +139,7 @@ def sgsim(
         par.line(0, comment="debugging level")
         par.line("sgsim_debug.dbg", comment="debug file")
         par.line("sgsim_output.out", comment="output file")
+        par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
 
         par.line(nrealizations, comment="number of realizations")
         par.line(grid.nx, grid.xmin, grid.xsiz, comment="nx, xmn, xsiz")
@@ -179,21 +182,44 @@ def sgsim(
         # Run sgsim
         run_gslib("sgsim", par_file)
 
-        # Read results - gridded format with all realizations concatenated
-        names, output_data, _grid_info = AsciiIO.read_gridded_data(output_file)
+        # Read results
+        if binary:
+            # Binary output: header is [ndim=4, nsim, nz, ny, nx]
+            # Data is sequential: all cells for sim1, then sim2, etc.
+            # Within each sim, cells are in Fortran order (x fastest)
+            # GSLIB uses single precision (float32)
+            with open(output_file, "rb") as f:
+                # Read header
+                ndim = np.fromfile(f, dtype=np.int32, count=1)[0]
+                shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
+                nreal_actual = shape[0]  # First dim is nsim
+                # Read flat data
+                values_flat = np.fromfile(f, dtype=np.float32)
 
-        # Reshape to (nreal, nz, ny, nx)
-        # Output data is (ncells * nrealizations, 1) - realizations are stacked sequentially
-        ncells = grid.nx * grid.ny * grid.nz
-        total_values = output_data.shape[0]
-        nreal_actual = total_values // ncells
+            ncells = grid.nx * grid.ny * grid.nz
+            result = np.zeros((nreal_actual, grid.nz, grid.ny, grid.nx), dtype=np.float64)
+            for i in range(nreal_actual):
+                start = i * ncells
+                end = start + ncells
+                result[i] = values_flat[start:end].reshape(
+                    (grid.nz, grid.ny, grid.nx), order="F"
+                )
+        else:
+            # ASCII output: gridded format with all realizations concatenated
+            names, output_data, _grid_info = AsciiIO.read_gridded_data(output_file)
 
-        result = np.zeros((nreal_actual, grid.nz, grid.ny, grid.nx), dtype=np.float64)
-        values = output_data[:, 0] if output_data.ndim > 1 else output_data.ravel()
-        for i in range(nreal_actual):
-            start = i * ncells
-            end = start + ncells
-            result[i] = values[start:end].reshape((grid.nz, grid.ny, grid.nx), order="F")
+            # Reshape to (nreal, nz, ny, nx)
+            # Output data is (ncells * nrealizations, 1) - realizations are stacked sequentially
+            ncells = grid.nx * grid.ny * grid.nz
+            total_values = output_data.shape[0]
+            nreal_actual = total_values // ncells
+
+            result = np.zeros((nreal_actual, grid.nz, grid.ny, grid.nx), dtype=np.float64)
+            values_arr = output_data[:, 0] if output_data.ndim > 1 else output_data.ravel()
+            for i in range(nreal_actual):
+                start = i * ncells
+                end = start + ncells
+                result[i] = values_arr[start:end].reshape((grid.nz, grid.ny, grid.nx), order="F")
 
     return SimulationResult(realizations=result, grid=grid)
 
@@ -218,6 +244,7 @@ def sisim(
     zmax: float = 30.0,
     search_angles: tuple[float, float, float] = (0.0, 0.0, 0.0),
     kriging_type: str = "simple",
+    binary: bool = False,
 ) -> SimulationResult:
     """
     Sequential indicator simulation using sisim.
@@ -238,6 +265,7 @@ def sisim(
         zmin, zmax: Minimum and maximum data values (for tail extrapolation)
         search_angles: Search anisotropy angles (azm, dip, rake)
         kriging_type: 'simple' or 'ordinary'
+        binary: If True, use binary I/O (faster for large grids)
 
     Returns:
         SimulationResult with realizations array (simulated values)
@@ -322,6 +350,7 @@ def sisim(
         par.line(0, comment="debugging level")
         par.line("sisim_debug.dbg", comment="debug file")
         par.line("sisim_output.out", comment="output file")
+        par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
 
         # Grid and simulation parameters
         par.line(nrealizations, comment="number of realizations")
@@ -362,19 +391,42 @@ def sisim(
         # Run sisim
         run_gslib("sisim", par_file)
 
-        # Read results - gridded format with all realizations concatenated
-        names, output_data, _grid_info = AsciiIO.read_gridded_data(output_file)
+        # Read results
+        if binary:
+            # Binary output: header is [ndim=4, nsim, nz, ny, nx]
+            # Data is sequential: all cells for sim1, then sim2, etc.
+            # Within each sim, cells are in Fortran order (x fastest)
+            # GSLIB uses single precision (float32)
+            with open(output_file, "rb") as f:
+                # Read header
+                ndim = np.fromfile(f, dtype=np.int32, count=1)[0]
+                shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
+                nreal_actual = shape[0]  # First dim is nsim
+                # Read flat data
+                values_flat = np.fromfile(f, dtype=np.float32)
 
-        # Reshape to (nreal, nz, ny, nx)
-        ncells = grid.nx * grid.ny * grid.nz
-        total_values = output_data.shape[0]
-        nreal_actual = total_values // ncells
+            ncells = grid.nx * grid.ny * grid.nz
+            result = np.zeros((nreal_actual, grid.nz, grid.ny, grid.nx), dtype=np.float64)
+            for i in range(nreal_actual):
+                start = i * ncells
+                end = start + ncells
+                result[i] = values_flat[start:end].reshape(
+                    (grid.nz, grid.ny, grid.nx), order="F"
+                )
+        else:
+            # ASCII output: gridded format with all realizations concatenated
+            names, output_data, _grid_info = AsciiIO.read_gridded_data(output_file)
 
-        result = np.zeros((nreal_actual, grid.nz, grid.ny, grid.nx), dtype=np.float64)
-        values_flat = output_data[:, 0] if output_data.ndim > 1 else output_data.ravel()
-        for i in range(nreal_actual):
-            start = i * ncells
-            end = start + ncells
-            result[i] = values_flat[start:end].reshape((grid.nz, grid.ny, grid.nx), order="F")
+            # Reshape to (nreal, nz, ny, nx)
+            ncells = grid.nx * grid.ny * grid.nz
+            total_values = output_data.shape[0]
+            nreal_actual = total_values // ncells
+
+            result = np.zeros((nreal_actual, grid.nz, grid.ny, grid.nx), dtype=np.float64)
+            values_flat = output_data[:, 0] if output_data.ndim > 1 else output_data.ravel()
+            for i in range(nreal_actual):
+                start = i * ncells
+                end = start + ncells
+                result[i] = values_flat[start:end].reshape((grid.nz, grid.ny, grid.nx), order="F")
 
     return SimulationResult(realizations=result, grid=grid)

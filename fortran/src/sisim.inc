@@ -51,7 +51,7 @@ c
      +                utail,ltpar,mpar,utpar,tmin,tmax,mxctx,
      +                mxcty,mxctz
 
-      common /simula/ nsim,ktype,lin,lout,idbg,ldbg
+      common /simula/ nsim,ktype,lin,lout,idbg,ldbg,ibinary
 
       common /srch3d/ radius,radsqd,sang1,sang2,sang3,sanis1,sanis2,
      +                noct,nclose,ndmax,mik,sstrat,nodmax,

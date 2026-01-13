@@ -328,6 +328,9 @@ c
       call chknam(outfl,512)
       write(*,*) ' output file = ',outfl(1:40)
 
+      read(lin,*,err=98) ibinary
+      write(*,*) ' binary output = ',ibinary
+
       read(lin,*,err=98) nx,xmn,xsiz
       write(*,*) ' nx, xmn, xsiz = ',nx,xmn,xsiz
 
@@ -775,26 +778,39 @@ c
 c Open the output file and write a header:
 c
       nreal = 1
-      open(lout,file=outfl,status='UNKNOWN')
-      if(koption.eq.0) then
-            write(lout,200) str
-            write(lout,204) ncut,nx,ny,nz,
-     +                      xmn,ymn,zmn,xsiz,ysiz,zsiz,nreal      
+      if(ibinary.eq.1) then
+c           Binary mode: stream access, unformatted
+            open(lout,file=outfl,status='UNKNOWN',
+     +           access='STREAM',form='UNFORMATTED')
+c           Write header: ndim, nvars, nz, ny, nx
+            if(koption.eq.0) then
+                  write(lout) 4, ncut, nz, ny, nx
+            else
+                  write(lout) 4, ncut+1, nz, ny, nx
+            end if
       else
-            write(lout,200) str
-            write(lout,204) ncut+1,nx,ny,nz,
-     +                      xmn,ymn,zmn,xsiz,ysiz,zsiz,nreal            
+c           ASCII mode: standard formatted output
+            open(lout,file=outfl,status='UNKNOWN')
+            if(koption.eq.0) then
+                  write(lout,200) str
+                  write(lout,204) ncut,nx,ny,nz,
+     +                            xmn,ymn,zmn,xsiz,ysiz,zsiz,nreal
+            else
+                  write(lout,200) str
+                  write(lout,204) ncut+1,nx,ny,nz,
+     +                            xmn,ymn,zmn,xsiz,ysiz,zsiz,nreal
+            end if
+ 200        format('IK3D Estimates with:',a40)
+ 204        format(i2,3(1x,i4),3(1x,g14.8),3(1x,g12.6),i4)
+            do i=1,ncut
+                  if(ivtype.eq.0) write(lout,201) i,thres(i)
+                  if(ivtype.eq.1) write(lout,202) i,thres(i)
+ 201              format('Category:  ',i2,' = ',g14.8)
+ 202              format('Threshold: ',i2,' = ',g14.8)
+            end do
+            if(koption.gt.0) write(lout,203)
+ 203        format('true value')
       end if
- 200  format('IK3D Estimates with:',a40)
- 204  format(i2,3(1x,i4),3(1x,g14.8),3(1x,g12.6),i4) 
-      do i=1,ncut
-            if(ivtype.eq.0) write(lout,201) i,thres(i)
-            if(ivtype.eq.1) write(lout,202) i,thres(i)
- 201        format('Category:  ',i2,' = ',g14.8)
- 202        format('Threshold: ',i2,' = ',g14.8)
-      end do
-      if(koption.gt.0) write(lout,203)
- 203  format('true value')
 c
 c Set up for cross validation:
 c
@@ -1120,10 +1136,20 @@ c
 c Write the IK CCDF for this grid node:
 c
  1    continue
-      if(koption.eq.0) then
-            write(lout,'(30(f8.4))') (ccdfo(i),i=1,ncut)
+      if(ibinary.eq.1) then
+c           Binary: write corrected probabilities directly
+            if(koption.eq.0) then
+                  write(lout) (ccdfo(i),i=1,ncut)
+            else
+                  write(lout) (ccdfo(i),i=1,ncut),true
+            end if
       else
-            write(lout,'(30(f8.4))') (ccdfo(i),i=1,ncut),true
+c           ASCII: formatted output
+            if(koption.eq.0) then
+                  write(lout,'(30(f8.4))') (ccdfo(i),i=1,ncut)
+            else
+                  write(lout,'(30(f8.4))') (ccdfo(i),i=1,ncut),true
+            end if
       end if
 c
 c END OF MAIN KRIGING LOOP:
@@ -1226,6 +1252,9 @@ c-----------------------------------------------------------------------
       write(lun,25)
  25   format('ik3d.out                         ',
      +       '-file for kriging output')
+      write(lun,251)
+ 251  format('0                                ',
+     +       '-binary output (0=no, 1=yes)')
       write(lun,26)
  26   format('10   2.5    5.0                  ',
      +       '-nx,xmn,xsiz')
