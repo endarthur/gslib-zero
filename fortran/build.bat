@@ -13,6 +13,7 @@ setlocal enabledelayedexpansion
 
 set FC=gfortran
 set FFLAGS=-O2 -std=legacy -w
+set LDFLAGS=-static
 set SRCDIR=src
 set GSLIBDIR=src\gslib
 set BINDIR=..\bin
@@ -55,8 +56,8 @@ for %%p in (%PROGRAMS%) do (
     %FC% %FFLAGS% -c "%SRCDIR%\%%p.for" -o "%SRCDIR%\%%p.o"
     if errorlevel 1 goto :error
 
-    REM Link with GSLIB subroutines
-    %FC% %FFLAGS% -o "%BINDIR%\%%p.exe" "%SRCDIR%\%%p.o" %GSLIBDIR%\*.o
+    REM Link with GSLIB subroutines (static linking for standalone exe)
+    %FC% %FFLAGS% %LDFLAGS% -o "%BINDIR%\%%p.exe" "%SRCDIR%\%%p.o" %GSLIBDIR%\*.o
     if errorlevel 1 goto :error
 
     echo   Created %BINDIR%\%%p.exe

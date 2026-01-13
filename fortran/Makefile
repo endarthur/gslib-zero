@@ -9,6 +9,15 @@
 # Requirements:
 #   - gfortran (install via: conda install -c conda-forge m2w64-gcc-fortran)
 
+# Windows executable extension and static linking (must be before targets)
+ifeq ($(OS),Windows_NT)
+    EXE = .exe
+    LDFLAGS = -static
+else
+    EXE =
+    LDFLAGS =
+endif
+
 FC = gfortran
 FFLAGS = -O2 -std=legacy -w
 FFLAGS_F90 = -O2
@@ -62,30 +71,30 @@ $(SRCDIR)/%.o: $(SRCDIR)/%.for
 $(SRCDIR)/%.o: $(SRCDIR)/%.f90
 	$(FC) $(FFLAGS_F90) -c $< -o $@
 
-# Link programs
+# Link programs (LDFLAGS includes -static on Windows for standalone binaries)
 $(BINDIR)/nscore$(EXE): $(SRCDIR)/nscore.o $(GSLIB_OBJS) | $(BINDIR)
-	$(FC) $(FFLAGS) -o $@ $^
+	$(FC) $(FFLAGS) $(LDFLAGS) -o $@ $^
 
 $(BINDIR)/backtr$(EXE): $(SRCDIR)/backtr.o $(GSLIB_OBJS) | $(BINDIR)
-	$(FC) $(FFLAGS) -o $@ $^
+	$(FC) $(FFLAGS) $(LDFLAGS) -o $@ $^
 
 $(BINDIR)/declus$(EXE): $(SRCDIR)/declus.o $(GSLIB_OBJS) | $(BINDIR)
-	$(FC) $(FFLAGS) -o $@ $^
+	$(FC) $(FFLAGS) $(LDFLAGS) -o $@ $^
 
 $(BINDIR)/gamv$(EXE): $(SRCDIR)/gamv.o $(GSLIB_OBJS) | $(BINDIR)
-	$(FC) $(FFLAGS) -o $@ $^
+	$(FC) $(FFLAGS) $(LDFLAGS) -o $@ $^
 
 $(BINDIR)/kt3d$(EXE): $(SRCDIR)/kt3d.o $(GSLIB_OBJS) | $(BINDIR)
-	$(FC) $(FFLAGS) -o $@ $^
+	$(FC) $(FFLAGS) $(LDFLAGS) -o $@ $^
 
 $(BINDIR)/ik3d$(EXE): $(SRCDIR)/ik3d.o $(GSLIB_OBJS) | $(BINDIR)
-	$(FC) $(FFLAGS) -o $@ $^
+	$(FC) $(FFLAGS) $(LDFLAGS) -o $@ $^
 
 $(BINDIR)/sgsim$(EXE): $(SRCDIR)/sgsim.o $(GSLIB_OBJS) | $(BINDIR)
-	$(FC) $(FFLAGS) -o $@ $^
+	$(FC) $(FFLAGS) $(LDFLAGS) -o $@ $^
 
 $(BINDIR)/sisim$(EXE): $(SRCDIR)/sisim.o $(GSLIB_OBJS) | $(BINDIR)
-	$(FC) $(FFLAGS) -o $@ $^
+	$(FC) $(FFLAGS) $(LDFLAGS) -o $@ $^
 
 # Clean build artifacts
 clean:
@@ -94,10 +103,3 @@ clean:
 	rm -f $(BINDIR)/declus$(EXE) $(BINDIR)/gamv$(EXE)
 	rm -f $(BINDIR)/kt3d$(EXE) $(BINDIR)/ik3d$(EXE)
 	rm -f $(BINDIR)/sgsim$(EXE) $(BINDIR)/sisim$(EXE)
-
-# Windows executable extension
-ifeq ($(OS),Windows_NT)
-    EXE = .exe
-else
-    EXE =
-endif
