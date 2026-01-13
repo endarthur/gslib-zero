@@ -162,10 +162,11 @@ def kt3d(
         # Read results
         if binary:
             # Binary output: 4D array (nvars=2, nz, ny, nx) with (est, var) interleaved
-            output_data = BinaryIO.read_array(output_file)
+            # GSLIB uses single precision (float32) for estimates
+            output_data = BinaryIO.read_array(output_file, dtype=np.float32)
             # Shape is (2, nz, ny, nx) - first dim is variable (0=est, 1=var)
-            estimate = output_data[0]  # Already (nz, ny, nx)
-            variance = output_data[1]
+            estimate = output_data[0].astype(np.float64)  # Convert to float64
+            variance = output_data[1].astype(np.float64)
         else:
             # ASCII output: kt3d has custom header format
             # Line 1: title

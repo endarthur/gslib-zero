@@ -129,13 +129,16 @@ class BinaryIO:
     def read_array(
         filepath: Path | str,
         fortran_order: bool = True,
-    ) -> NDArray[np.float64]:
+        dtype: type = np.float64,
+    ) -> NDArray[np.floating]:
         """
         Read a numpy array from binary file produced by GSLIB.
 
         Args:
             filepath: Input file path
             fortran_order: If True, reshape with Fortran ordering
+            dtype: Data type of the array elements. Use np.float32 for GSLIB
+                   single-precision output (default np.float64 for general use)
 
         Returns:
             Numpy array with data from file
@@ -148,7 +151,7 @@ class BinaryIO:
             shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
 
             # Read data
-            data = np.fromfile(f, dtype=np.float64)
+            data = np.fromfile(f, dtype=dtype)
 
         # Reshape with correct ordering
         order = "F" if fortran_order else "C"

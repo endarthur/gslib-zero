@@ -187,6 +187,56 @@ class TestKt3d:
 
         assert result.estimate.shape == (small_grid.nz, small_grid.ny, small_grid.nx)
 
+    def test_kt3d_binary_matches_ascii(self, sample_data, spherical_variogram):
+        """Test that binary mode produces same results as ASCII mode."""
+        x = sample_data["x"]
+        y = sample_data["y"]
+        z = sample_data["z"]
+        values = sample_data["values"]
+
+        small_grid = GridSpec(
+            nx=5, ny=5, nz=2,
+            xmin=25.0, ymin=25.0, zmin=2.5,
+            xsiz=10.0, ysiz=10.0, zsiz=2.5,
+        )
+
+        search = SearchParameters(
+            radius1=50.0, radius2=50.0, radius3=10.0,
+            min_samples=1, max_samples=16,
+        )
+
+        # Run in ASCII mode
+        result_ascii = kt3d(
+            x, y, z, values,
+            grid=small_grid,
+            variogram=spherical_variogram,
+            search=search,
+            kriging_type="ordinary",
+            binary=False,
+        )
+
+        # Run in binary mode
+        result_binary = kt3d(
+            x, y, z, values,
+            grid=small_grid,
+            variogram=spherical_variogram,
+            search=search,
+            kriging_type="ordinary",
+            binary=True,
+        )
+
+        # Results should match within float32 precision (~1e-5 relative error)
+        assert result_binary.estimate.shape == result_ascii.estimate.shape
+        assert result_binary.variance.shape == result_ascii.variance.shape
+
+        # Check estimates match
+        est_diff = np.abs(result_ascii.estimate - result_binary.estimate)
+        assert est_diff.max() < 1e-4, f"Max estimate diff: {est_diff.max()}"
+
+        # Check variances match
+        var_diff = np.abs(result_ascii.variance - result_binary.variance)
+        assert var_diff.max() < 1e-4, f"Max variance diff: {var_diff.max()}"
+
 
 class TestSgsim:
     """Test Sequential Gaussian simulation."""
