@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'fortran/src/**'
+      - 'fortran/**'
       - '.github/workflows/build-fortran.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'fortran/src/**'
+      - 'fortran/**'
   workflow_dispatch:
 
 jobs:
