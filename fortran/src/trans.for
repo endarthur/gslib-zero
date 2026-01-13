@@ -62,7 +62,7 @@ c
 c
 c AUTHOR: Clayton V. Deutsch                             DATE: 1989-1999
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       parameter(MAXCAT=24,MV=500,EPSLON=1.0e-12,VERSION=3.000)
 
       character distin*512,datafl*512,outfl*512,localfl*512,str*512

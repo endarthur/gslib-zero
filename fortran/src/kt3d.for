@@ -90,7 +90,7 @@ c
 c
 c
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       use       geostat
       include  'kt3d.inc'
       parameter(MV=100)

@@ -75,7 +75,7 @@ c
 c Based on program   ``gscale.f''  and  ``color.f''  provided by Hua Zhu
 c Modified: Clayton V. Deutsch                           Date: 1989-1999
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       parameter(MAXH   =1000, MAXV=1000,BIGNUM =99999., EPSLON=1.0e-20,
      +          MAXCAT =  24, VERSION=3.000)
 

@@ -109,7 +109,7 @@ c
 c
 c
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       use       geostat
       parameter(MV=500)
       real      var(MV),cut(MV)

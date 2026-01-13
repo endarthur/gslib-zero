@@ -63,7 +63,7 @@ c
 c
 c AUTHOR: Clayton V. Deutsch                             DATE: 1989-1999
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       parameter (MAXCLS = 500, VERSION=3.000)
 c
 c Needed variable declaration:

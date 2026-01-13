@@ -106,7 +106,7 @@ c
 c
 c
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       use       geostat
       include  'sgsim.inc'
       real      var(50)

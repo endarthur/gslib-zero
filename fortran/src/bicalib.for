@@ -49,7 +49,7 @@ c
 c Original: Hua Zhu                                  Date:     July 1990
 c Modified: Clayton V. Deutsch                                 1990-1999
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
 c
 c Fixed Parameters:
 c

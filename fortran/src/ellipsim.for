@@ -43,7 +43,7 @@ c
 c
 c AUTHOR: Clayton V. Deutsch                             DATE: 1989-1999
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       parameter(MAXELP=25)
       parameter(KORDEI=12,MAXOP1=KORDEI+1,MAXINT=2**30,MAXROT=MAXELP,
      +          EPSLON=1.0e-10,VERSION=3.000)

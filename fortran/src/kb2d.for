@@ -91,7 +91,7 @@ c
 c
 c
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       use       geostat
       parameter(MV=20)
       real      var(MV)

@@ -68,7 +68,7 @@ c
 c Original: H. Xiao                                                 1975
 c Modified: Clayton V. Deutsch                                 1989-1999
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       external   f
       external   g
       parameter  (PI=3.14159265, DEG2RAD=PI/180.0, EPSLON = 1.0e-20,

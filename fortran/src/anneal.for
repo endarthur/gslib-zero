@@ -115,7 +115,7 @@ c
 c
 c
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       use       geostat
 c
 c ACORN parameters:

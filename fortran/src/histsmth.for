@@ -96,7 +96,7 @@ c
 c
 c
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       include 'histsmth.inc'
 
       parameter (KORDEI=12,MAXOP1=KORDEI+1,MAXINT=2**30)

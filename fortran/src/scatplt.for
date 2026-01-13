@@ -59,7 +59,7 @@ c
 c
 c AUTHOR: Clayton V. Deutsch                             DATE: 1989-1999
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       parameter (MV=500, EPSLON=1.0e-21, VERSION=3.000)
       integer    test
       character  datafl*512,outfl*512,title*40,str*512,xlab*24,ylab*24

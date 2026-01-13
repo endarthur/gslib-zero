@@ -102,7 +102,7 @@ c          (sisim.inc)
 c
 c
 c-----------------------------------------------------------------------
-      use       msflib
+c     use       msflib  ! Removed for gfortran compatibility
       use       geostat
       include  'sisim_lm.inc'
       parameter(MV=200)
