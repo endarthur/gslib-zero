@@ -1,0 +1,95 @@
+name: Build GSLIB Fortran
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'fortran/src/**'
+      - '.github/workflows/build-fortran.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'fortran/src/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: gslib-linux
+          - os: macos-latest
+            artifact: gslib-macos
+          - os: windows-latest
+            artifact: gslib-windows
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gfortran (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran
+
+      - name: Install gfortran (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gcc
+
+      - name: Install gfortran (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc-fortran make
+
+      - name: Build (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cd fortran
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          cd fortran
+          make all
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: bin/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+
+      - name: Create combined release
+        run: |
+          mkdir -p release
+          cp -r binaries/gslib-linux/* release/ 2>/dev/null || true
+          cp -r binaries/gslib-macos/* release/ 2>/dev/null || true
+          cp -r binaries/gslib-windows/* release/ 2>/dev/null || true
+          ls -la release/
+
+      - name: Upload combined artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gslib-all-platforms
+          path: release/*

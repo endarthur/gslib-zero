@@ -66,7 +66,8 @@ c
      +                xsiz,ysiz,zsiz,ndmax,ndmin,radius,noct,nxdis,
      +                nydis,nzdis,idrif,itrend,ktype,skmean,koption,
      +                idbg,ldbg,iout,lout,iext,lext,iextve,ljack,
-     +                idhlj,ixlj,iylj,izlj,ivrlj,iextvj,nvarij
+     +                idhlj,ixlj,iylj,izlj,ivrlj,iextvj,nvarij,
+     +                ibinary
 c
 c Variogram Parameters:
 c

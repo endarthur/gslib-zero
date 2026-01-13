@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
-from gslib_zero.core import AsciiIO, GSLIBWorkspace, run_gslib
+from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib
 from gslib_zero.par import ParFileBuilder
 from gslib_zero.utils import GridSpec, VariogramModel
 
@@ -58,6 +58,7 @@ def kt3d(
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
     block_discretization: tuple[int, int, int] = (1, 1, 1),
+    binary: bool = False,
 ) -> KrigingResult:
     """
     3D kriging estimation using kt3d.
@@ -73,6 +74,7 @@ def kt3d(
         tmin, tmax: Trimming limits
         block_discretization: Number of discretization points (nx, ny, nz)
                              for block kriging. (1,1,1) = point kriging.
+        binary: If True, use binary I/O (requires gslib-zero modified binaries)
 
     Returns:
         KrigingResult with estimate, variance, and grid spec
@@ -122,6 +124,9 @@ def kt3d(
         par.line(0, comment="debugging level (0=none)")
         par.line("kt3d_debug.dbg", comment="debug file")
         par.line("kt3d_output.out", comment="output file")
+        # Binary output flag - only for gslib-zero modified binaries
+        if binary:
+            par.line(1, comment="binary output (gslib-zero only)")
         par.line(grid.nx, grid.xmin, grid.xsiz, comment="nx, xmn, xsiz")
         par.line(grid.ny, grid.ymin, grid.ysiz, comment="ny, ymn, ysiz")
         par.line(grid.nz, grid.zmin, grid.zsiz, comment="nz, zmn, zsiz")
@@ -155,17 +160,25 @@ def kt3d(
         # Run kt3d
         run_gslib("kt3d", par_file)
 
-        # Read results - output is gridded GSLIB format with estimate and variance
-        names, output_data, _grid_info = AsciiIO.read_gridded_data(output_file)
+        # Read results
+        if binary:
+            # Binary output: 4D array (nvars=2, nz, ny, nx) with (est, var) interleaved
+            output_data = BinaryIO.read_array(output_file)
+            # Shape is (2, nz, ny, nx) - first dim is variable (0=est, 1=var)
+            estimate = output_data[0]  # Already (nz, ny, nx)
+            variance = output_data[1]
+        else:
+            # ASCII output: gridded GSLIB format with estimate and variance columns
+            names, output_data, _grid_info = AsciiIO.read_gridded_data(output_file)
 
-        # First column is estimate, second is variance
-        estimate = output_data[:, 0]
-        variance = output_data[:, 1] if output_data.shape[1] > 1 else np.zeros_like(estimate)
+            # First column is estimate, second is variance
+            estimate = output_data[:, 0]
+            variance = output_data[:, 1] if output_data.shape[1] > 1 else np.zeros_like(estimate)
 
-        # Reshape to grid dimensions (GSLIB uses Fortran ordering: z fastest)
-        shape = (grid.nz, grid.ny, grid.nx)
-        estimate = estimate.reshape(shape, order="F")
-        variance = variance.reshape(shape, order="F")
+            # Reshape to grid dimensions (GSLIB uses Fortran ordering: z fastest)
+            shape = (grid.nz, grid.ny, grid.nx)
+            estimate = estimate.reshape(shape, order="F")
+            variance = variance.reshape(shape, order="F")
 
     return KrigingResult(estimate=estimate, variance=variance, grid=grid)
 

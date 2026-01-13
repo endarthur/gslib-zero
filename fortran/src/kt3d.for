@@ -214,6 +214,9 @@ c
       call chknam(outfl,512)
       write(*,*) ' output file = ',outfl(1:40)
 
+      read(lin,*,err=98) ibinary
+      write(*,*) ' binary output = ',ibinary
+
       read(lin,*,err=98) nx,xmn,xsiz
       write(*,*) ' nx, xmn, xsiz = ',nx,xmn,xsiz
 
@@ -605,34 +608,53 @@ c
 c Open the debugging and output files:
 c
       open(ldbg,file=dbgfl,status='UNKNOWN')
-      open(lout,file=outfl,status='UNKNOWN')
-      write(lout,'(a80)') title
-
-      if(iktype.eq.0.and.koption.eq.0) then
-           write(lout,201) 2,nx,ny,nz
-           write(lout,102)
- 102       format('Estimate',/,'EstimationVariance')
-      end if
-      if(iktype.eq.0.and.koption.ge.1) then
-           write(lout,201) 7
-           write(lout,103)
- 103       format('X',/,'Y',/,'Z',/,'True',/,'Estimate',/,
-     +            'EstimationVariance',/,'Error: est-true')
-      end if
- 201  format(4(1x,i4))
-
-      if(iktype.eq.1) then
-            if(koption.eq.0) then
-                  write(lout,201) ncut,nx,ny,nz
-            else
-                  write(lout,201) ncut+1
+      if(ibinary.eq.1) then
+c
+c Binary output mode: open as stream unformatted
+c
+            open(lout,file=outfl,status='UNKNOWN',access='STREAM',
+     +           form='UNFORMATTED')
+c
+c Write binary header: ndim, then dimensions
+c Format: ndim(int32), nvars(int32), nz(int32), ny(int32), nx(int32)
+c Data will follow as float64 values (est, var) per cell
+c
+            if(iktype.eq.0.and.koption.eq.0) then
+                  write(lout) 4, 2, nz, ny, nx
             end if
-            do i=1,ncut
-                  write(lout,104) i,cut(i)
- 104              format('Threshold: ',i2,' = ',f12.5)
-            end do
-            if(koption.eq.1) write(lout,105)
- 105        format('true value')
+      else
+c
+c ASCII output mode (original GSLIB format)
+c
+            open(lout,file=outfl,status='UNKNOWN')
+            write(lout,'(a80)') title
+
+            if(iktype.eq.0.and.koption.eq.0) then
+                 write(lout,201) 2,nx,ny,nz
+                 write(lout,102)
+ 102             format('Estimate',/,'EstimationVariance')
+            end if
+            if(iktype.eq.0.and.koption.ge.1) then
+                 write(lout,201) 7
+                 write(lout,103)
+ 103             format('X',/,'Y',/,'Z',/,'True',/,'Estimate',/,
+     +                  'EstimationVariance',/,'Error: est-true')
+            end if
+ 201        format(4(1x,i4))
+
+            if(iktype.eq.1) then
+                  if(koption.eq.0) then
+                        write(lout,201) ncut,nx,ny,nz
+                  else
+                        write(lout,201) ncut+1
+                  end if
+                  do i=1,ncut
+                        write(lout,104) i,cut(i)
+ 104                    format('Threshold: ',i2,' = ',f12.5)
+                  end do
+                  if(koption.eq.1) write(lout,105)
+ 105              format('true value')
+            end if
       end if
 c
 c Open the external drift file if needed and position it at the
@@ -1315,7 +1337,11 @@ c
  1          continue
             if(iktype.eq.0) then
                   if(koption.eq.0) then
-                        write(lout,'(g14.8,1x,g14.8)') est,estv
+                        if(ibinary.eq.1) then
+                              write(lout) est,estv
+                        else
+                              write(lout,'(g14.8,1x,g14.8)') est,estv
+                        end if
                   else
                         err = UNEST
                         if(true.ne.UNEST.and.est.ne.UNEST) then
@@ -1434,6 +1460,9 @@ c-----------------------------------------------------------------------
       write(lun,19)
  19   format('kt3d.out                         ',
      +       '-file for kriged output')
+      write(lun,119)
+ 119  format('0                                ',
+     +       '-0=ASCII output, 1=binary output')
       write(lun,20)
  20   format('50   0.5    1.0                  ',
      +       '-nx,xmn,xsiz')
