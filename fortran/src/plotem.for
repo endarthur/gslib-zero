@@ -38,7 +38,7 @@ c files       - files from this point forward will be used
 c
 c
 c-----------------------------------------------------------------------
-      use msflib
+c     use msflib  ! Removed for gfortran compatibility
       
       parameter(MAXLEN=2048,MAXX=12,MAXY=12,VERSION=3.000)
       character str*2048,title*2048,pagenum*2048,
