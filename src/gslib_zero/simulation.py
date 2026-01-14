@@ -48,6 +48,7 @@ def sgsim(
     tmax: float = 1.0e21,
     search_angles: tuple[float, float, float] = (0.0, 0.0, 0.0),
     binary: bool = False,
+    mask: NDArray[np.integer] | None = None,
 ) -> SimulationResult:
     """
     Sequential Gaussian simulation using sgsim.
@@ -71,6 +72,8 @@ def sgsim(
         tmin, tmax: Trimming limits
         search_angles: Search anisotropy angles (azm, dip, rake)
         binary: If True, use binary I/O (faster for large grids)
+        mask: Grid mask array (0=skip, 1=simulate). Shape must match grid (nz, ny, nx).
+              Masked cells output UNEST (-999).
 
     Returns:
         SimulationResult with realizations array
@@ -99,6 +102,17 @@ def sgsim(
         output_file = workspace / "sgsim_output.out"
         debug_file = workspace / "sgsim_debug.dbg"
         par_file = workspace / "sgsim.par"
+        mask_file = workspace / "sgsim_mask.bin"
+
+        # Write mask file if provided
+        if mask is not None:
+            mask_arr = np.asarray(mask, dtype=np.int8)
+            expected_shape = (grid.nz, grid.ny, grid.nx)
+            if mask_arr.shape != expected_shape:
+                raise ValueError(f"Mask shape {mask_arr.shape} doesn't match grid {expected_shape}")
+            with open(mask_file, "wb") as f:
+                np.array([3, grid.nz, grid.ny, grid.nx], dtype=np.int32).tofile(f)
+                mask_arr.ravel(order="F").tofile(f)
 
         # Write input data if we have conditioning data
         if has_data:
@@ -140,6 +154,13 @@ def sgsim(
         par.line("sgsim_debug.dbg", comment="debug file")
         par.line("sgsim_output.out", comment="output file")
         par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
+
+        # Grid mask
+        if mask is not None:
+            par.line(1, comment="use grid mask (0=no, 1=yes)")
+            par.line("sgsim_mask.bin", comment="mask file")
+        else:
+            par.line(0, comment="use grid mask (0=no, 1=yes)")
 
         par.line(nrealizations, comment="number of realizations")
         par.line(grid.nx, grid.xmin, grid.xsiz, comment="nx, xmn, xsiz")
@@ -245,6 +266,7 @@ def sisim(
     search_angles: tuple[float, float, float] = (0.0, 0.0, 0.0),
     kriging_type: str = "simple",
     binary: bool = False,
+    mask: NDArray[np.integer] | None = None,
 ) -> SimulationResult:
     """
     Sequential indicator simulation using sisim.
@@ -266,6 +288,8 @@ def sisim(
         search_angles: Search anisotropy angles (azm, dip, rake)
         kriging_type: 'simple' or 'ordinary'
         binary: If True, use binary I/O (faster for large grids)
+        mask: Grid mask array (0=skip, 1=simulate). Shape must match grid (nz, ny, nx).
+              Masked cells output UNEST (-99).
 
     Returns:
         SimulationResult with realizations array (simulated values)
@@ -294,6 +318,17 @@ def sisim(
         output_file = workspace / "sisim_output.out"
         debug_file = workspace / "sisim_debug.dbg"
         par_file = workspace / "sisim.par"
+        mask_file = workspace / "sisim_mask.bin"
+
+        # Write mask file if provided
+        if mask is not None:
+            mask_arr = np.asarray(mask, dtype=np.int8)
+            expected_shape = (grid.nz, grid.ny, grid.nx)
+            if mask_arr.shape != expected_shape:
+                raise ValueError(f"Mask shape {mask_arr.shape} doesn't match grid {expected_shape}")
+            with open(mask_file, "wb") as f:
+                np.array([3, grid.nz, grid.ny, grid.nx], dtype=np.int32).tofile(f)
+                mask_arr.ravel(order="F").tofile(f)
 
         if has_data:
             AsciiIO.write_data(
@@ -351,6 +386,13 @@ def sisim(
         par.line("sisim_debug.dbg", comment="debug file")
         par.line("sisim_output.out", comment="output file")
         par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
+
+        # Grid mask
+        if mask is not None:
+            par.line(1, comment="use grid mask (0=no, 1=yes)")
+            par.line("sisim_mask.bin", comment="mask file")
+        else:
+            par.line(0, comment="use grid mask (0=no, 1=yes)")
 
         # Grid and simulation parameters
         par.line(nrealizations, comment="number of realizations")

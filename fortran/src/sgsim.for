@@ -38,6 +38,7 @@ c
       integer,allocatable   :: nisb(:),icnode(:),order(:)
       integer*2,allocatable :: ixnode(:),iynode(:),iznode(:),
      +          ixsbtosr(:),iysbtosr(:),izsbtosr(:)
+      integer*1,allocatable :: gridmask(:)
 
       end module
 c
@@ -111,6 +112,7 @@ c     use       msflib  ! Removed for gfortran compatibility
       include  'sgsim.inc'
       real      var(50)
       real*8    p,acorni,cp,oldcp,w
+      integer   ndim_m,nx_m,ny_m,nz_m
       character transfl*512,smthfl*512,tmpfl*512,datafl*512,outfl*512,
      +          dbgfl*512,lvmfl*512,str*512
       logical   testfl,testind,trans
@@ -202,6 +204,14 @@ c
 
       read(lin,*,err=98) ibinary
       write(*,*) ' binary output = ',ibinary
+
+      read(lin,*,err=98) imask
+      write(*,*) ' use grid mask = ',imask
+      if(imask.eq.1) then
+            read(lin,'(a512)',err=98) maskfl
+            call chknam(maskfl,512)
+            write(*,*) ' mask file = ',maskfl(1:40)
+      end if
 
       read(lin,*,err=98) nsim
       write(*,*) ' number of realizations = ',nsim
@@ -309,6 +319,34 @@ c
       end do
       write(*,*)
       close(lin)
+c
+c Read grid mask if enabled:
+c
+      if(imask.eq.1) then
+            allocate(gridmask(nxyz),stat = test)
+            if(test.ne.0) then
+                  write(*,*) 'ERROR allocating gridmask'
+                  stop
+            endif
+            inquire(file=maskfl,exist=testfl)
+            if(.not.testfl) then
+                  write(*,*) 'ERROR mask file does not exist: ',
+     +                       maskfl(1:40)
+                  stop
+            end if
+            open(9,file=maskfl,status='OLD',access='STREAM',
+     +           form='UNFORMATTED',err=97)
+            read(9) ndim_m, nz_m, ny_m, nx_m
+            if(nx_m.ne.nx.or.ny_m.ne.ny.or.nz_m.ne.nz) then
+                  write(*,*) 'ERROR mask dims do not match grid'
+                  write(*,*) '  mask: ',nx_m,ny_m,nz_m
+                  write(*,*) '  grid: ',nx,ny,nz
+                  stop
+            end if
+            read(9) (gridmask(i),i=1,nxyz)
+            close(9)
+            write(*,*) 'Mask file read successfully'
+      end if
 c
 c Find the needed parameters:
 c
@@ -1280,6 +1318,15 @@ c Figure out the location of this point and make sure it has
 c not been assigned a value already:
 c
                   index = order(in)
+c
+c Check mask - skip if inactive:
+c
+                  if(imask.eq.1) then
+                        if(gridmask(index).eq.0) then
+                              sim(index) = UNEST
+                              go to 5
+                        end if
+                  end if
                   if(sim(index).gt.(UNEST+EPSLON).or.
      +               sim(index).lt.(UNEST*2.0)) go to 5
                   iz = int((index-1)/nxy) + 1
@@ -2015,6 +2062,12 @@ c-----------------------------------------------------------------------
       write(lun,241)
  241  format('0                             ',
      +       '-binary output (0=no, 1=yes)')
+      write(lun,242)
+ 242  format('0                             ',
+     +       '-use grid mask (0=no, 1=yes)')
+      write(lun,243)
+ 243  format('sgsim_mask.bin                ',
+     +       '-mask file (if mask=1)')
       write(lun,25)
  25   format('1                             ',
      +       '-number of realizations to generate')

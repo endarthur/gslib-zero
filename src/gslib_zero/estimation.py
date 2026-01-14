@@ -59,6 +59,7 @@ def kt3d(
     tmax: float = 1.0e21,
     block_discretization: tuple[int, int, int] = (1, 1, 1),
     binary: bool = False,
+    mask: NDArray[np.integer] | None = None,
 ) -> KrigingResult:
     """
     3D kriging estimation using kt3d.
@@ -75,6 +76,8 @@ def kt3d(
         block_discretization: Number of discretization points (nx, ny, nz)
                              for block kriging. (1,1,1) = point kriging.
         binary: If True, use binary I/O (requires gslib-zero modified binaries)
+        mask: Optional grid mask (same shape as output grid). 0=skip, 1=estimate.
+              Masked cells will have UNEST (-999) in output.
 
     Returns:
         KrigingResult with estimate, variance, and grid spec
@@ -96,7 +99,20 @@ def kt3d(
         data_file = workspace / "kt3d_input.dat"
         output_file = workspace / "kt3d_output.out"
         debug_file = workspace / "kt3d_debug.dbg"
+        mask_file = workspace / "kt3d_mask.bin"
         par_file = workspace / "kt3d.par"
+
+        # Write mask file if provided
+        if mask is not None:
+            mask_arr = np.asarray(mask, dtype=np.int8)
+            expected_shape = (grid.nz, grid.ny, grid.nx)
+            if mask_arr.shape != expected_shape:
+                raise ValueError(f"Mask shape {mask_arr.shape} doesn't match grid {expected_shape}")
+            with open(mask_file, "wb") as f:
+                # Header: [ndim=3, nz, ny, nx]
+                np.array([3, grid.nz, grid.ny, grid.nx], dtype=np.int32).tofile(f)
+                # Data: int8 values in Fortran order
+                mask_arr.ravel(order="F").tofile(f)
 
         # Write input data (dhid, x, y, z, value, extvar)
         # Use dummy drillhole ID and external variable
@@ -126,6 +142,12 @@ def kt3d(
         par.line("kt3d_output.out", comment="output file")
         # Binary output flag: 0=ASCII, 1=binary (gslib-zero modified binaries)
         par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
+        # Grid mask: 0=no mask, 1=use mask
+        if mask is not None:
+            par.line(1, comment="use grid mask (0=no, 1=yes)")
+            par.line("kt3d_mask.bin", comment="mask file")
+        else:
+            par.line(0, comment="use grid mask (0=no, 1=yes)")
         par.line(grid.nx, grid.xmin, grid.xsiz, comment="nx, xmn, xsiz")
         par.line(grid.ny, grid.ymin, grid.ysiz, comment="ny, ymn, ysiz")
         par.line(grid.nz, grid.zmin, grid.zsiz, comment="nz, zmn, zsiz")
@@ -228,6 +250,7 @@ def ik3d(
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
     binary: bool = False,
+    mask: NDArray[np.integer] | None = None,
 ) -> IndicatorKrigingResult:
     """
     Indicator kriging using ik3d.
@@ -246,6 +269,8 @@ def ik3d(
         median_cutoff_index: Cutoff index to use for median IK (0-based)
         tmin, tmax: Trimming limits
         binary: If True, use binary I/O (requires gslib-zero modified binaries)
+        mask: Optional grid mask (same shape as output grid). 0=skip, 1=estimate.
+              Masked cells will have UNEST (-999) in output.
 
     Returns:
         IndicatorKrigingResult with probabilities array of shape (ncut, nz, ny, nx)
@@ -274,7 +299,18 @@ def ik3d(
         data_file = workspace / "ik3d_input.dat"
         output_file = workspace / "ik3d_output.out"
         debug_file = workspace / "ik3d_debug.dbg"
+        mask_file = workspace / "ik3d_mask.bin"
         par_file = workspace / "ik3d.par"
+
+        # Write mask file if provided
+        if mask is not None:
+            mask_arr = np.asarray(mask, dtype=np.int8)
+            expected_shape = (grid.nz, grid.ny, grid.nx)
+            if mask_arr.shape != expected_shape:
+                raise ValueError(f"Mask shape {mask_arr.shape} doesn't match grid {expected_shape}")
+            with open(mask_file, "wb") as f:
+                np.array([3, grid.nz, grid.ny, grid.nx], dtype=np.int32).tofile(f)
+                mask_arr.ravel(order="F").tofile(f)
 
         # Write input data with drillhole ID column
         dhid = np.arange(1, n + 1, dtype=np.float64)
@@ -308,6 +344,12 @@ def ik3d(
         par.line("ik3d_debug.dbg", comment="debug file")
         par.line("ik3d_output.out", comment="output file")
         par.line(1 if binary else 0, comment="binary output (0=ASCII, 1=binary)")
+        # Grid mask: 0=no mask, 1=use mask
+        if mask is not None:
+            par.line(1, comment="use grid mask (0=no, 1=yes)")
+            par.line("ik3d_mask.bin", comment="mask file")
+        else:
+            par.line(0, comment="use grid mask (0=no, 1=yes)")
         par.line(grid.nx, grid.xmin, grid.xsiz, comment="nx, xmn, xsiz")
         par.line(grid.ny, grid.ymin, grid.ysiz, comment="ny, ymn, ysiz")
         par.line(grid.nz, grid.zmin, grid.zsiz, comment="nz, zmn, zsiz")

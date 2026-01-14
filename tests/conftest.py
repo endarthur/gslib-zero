@@ -43,6 +43,16 @@ def spherical_variogram():
 
 
 @pytest.fixture
+def irregular_grid():
+    """Create an irregular (non-cubic) test grid with odd dimensions."""
+    return GridSpec(
+        nx=17, ny=23, nz=7,  # Odd, non-equal dimensions
+        xmin=2.5, ymin=5.0, zmin=0.25,  # Non-standard origins
+        xsiz=2.5, ysiz=1.5, zsiz=3.0,  # Non-equal cell sizes
+    )
+
+
+@pytest.fixture
 def clustered_data():
     """Generate clustered sample data for declustering tests."""
     rng = np.random.default_rng(123)

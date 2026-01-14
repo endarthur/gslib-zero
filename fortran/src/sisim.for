@@ -29,9 +29,9 @@ c
 c Module to declare dynamic arrays in multiple subroutines:
 c
       module      geostat
-      
+
       real,allocatable   :: x(:),y(:),z(:),vr(:,:),close(:),actloc(:),
-     +                      tmpdat(:),order(:),gcut(:),sim(:),tmp(:),   
+     +                      tmpdat(:),order(:),gcut(:),sim(:),tmp(:),
      +                      gcdf(:),covtab(:,:,:,:),cnodex(:),cnodey(:),
      +                      cnodez(:),cnodev(:),cnodet(:),vra(:),
      +                      thres(:),cdf(:),ccdf(:),ccdfo(:),beez(:),
@@ -43,7 +43,8 @@ c
      +                       izsbtosr(:),it(:),nst(:),nviol(:)
       real*8,allocatable  :: rotmat(:,:,:)
       logical,allocatable :: atnode(:),softdat(:)
-      
+      integer*1,allocatable :: gridmask(:)
+
       end module
 c
 c
@@ -108,7 +109,7 @@ c     use       msflib  ! Removed for gfortran compatibility
       real      var(MV)
       real*8    p,acorni
       integer,allocatable :: ivrs(:)
-      integer   test
+      integer   test,ndim_m,nx_m,ny_m,nz_m
       character datafl*512,tabfl*512,softfl*512,outfl*512,dbgfl*512,
      +          str*512,title*80
       logical   testfl
@@ -388,6 +389,14 @@ c
       read(lin,*,err=98) ibinary
       write(*,*) ' binary output = ',ibinary
 
+      read(lin,*,err=98) imask
+      write(*,*) ' use grid mask = ',imask
+      if(imask.eq.1) then
+            read(lin,'(a512)',err=98) maskfl
+            call chknam(maskfl,512)
+            write(*,*) ' mask file = ',maskfl(1:40)
+      end if
+
       read(lin,*,err=98) nsim
       write(*,*) ' number of simulations = ',nsim
 
@@ -471,6 +480,34 @@ c
             end do
       end do
       close(lin)
+c
+c Read grid mask if enabled:
+c
+      if(imask.eq.1) then
+            allocate(gridmask(nxyz),stat = test)
+            if(test.ne.0) then
+                  write(*,*) 'ERROR allocating gridmask'
+                  stop
+            endif
+            inquire(file=maskfl,exist=testfl)
+            if(.not.testfl) then
+                  write(*,*) 'ERROR mask file does not exist: ',
+     +                       maskfl(1:40)
+                  stop
+            end if
+            open(9,file=maskfl,status='OLD',access='STREAM',
+     +           form='UNFORMATTED',err=97)
+            read(9) ndim_m, nz_m, ny_m, nx_m
+            if(nx_m.ne.nx.or.ny_m.ne.ny.or.nz_m.ne.nz) then
+                  write(*,*) 'ERROR mask dims do not match grid'
+                  write(*,*) '  mask: ',nx_m,ny_m,nz_m
+                  write(*,*) '  grid: ',nx,ny,nz
+                  stop
+            end if
+            read(9) (gridmask(i),i=1,nxyz)
+            close(9)
+            write(*,*) 'Mask file read successfully'
+      end if
 c
 c Find the needed parameters:
 c
@@ -1279,6 +1316,15 @@ c
  104              format('   currently on node ',i9)
                   index = int(order(in)+0.5)
 c
+c Check mask - skip if inactive:
+c
+                  if(imask.eq.1) then
+                        if(gridmask(index).eq.0) then
+                              sim(index) = UNEST
+                              go to 20
+                        end if
+                  end if
+c
 c Do we really need to simulate this grid node location?
 c
                   if(sim(index).ne.UNEST) go to 20
@@ -2039,6 +2085,12 @@ c-----------------------------------------------------------------------
       write(lun,301)
  301  format('0                             ',
      +       '-binary output (0=no, 1=yes)')
+      write(lun,302)
+ 302  format('0                             ',
+     +       '-use grid mask (0=no, 1=yes)')
+      write(lun,303)
+ 303  format('sisim_mask.bin                ',
+     +       '-mask file (if mask=1)')
       write(lun,31)
  31   format('1                             ',
      +       '-number of realizations')

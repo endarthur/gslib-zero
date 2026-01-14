@@ -128,10 +128,68 @@ Skip inactive cells during estimation/simulation. Significant speedup for sparse
 
 | Program | Mask Support | Status |
 |---------|-------------|--------|
-| kt3d    | ⬜ Todo     | - |
-| ik3d    | ⬜ Todo     | - |
-| sgsim   | ⬜ Todo     | - |
-| sisim   | ⬜ Todo     | - |
+| kt3d    | ✅ Done     | Complete |
+| ik3d    | ✅ Done     | Complete |
+| sgsim   | ✅ Done     | Complete |
+| sisim   | ✅ Done     | Complete |
+
+### Mask File Format
+```
+Header: [ndim=3: int32] [nz: int32] [ny: int32] [nx: int32]
+Data:   [mask_values: int8 × (nx*ny*nz)]
+```
+- Mask value 0 = inactive (skip), 1 = active (estimate/simulate)
+- Order: Fortran column-major (z varies fastest)
+- Masked cells output placeholder value (UNEST: -999.0 for kt3d/sgsim/sisim, -9.9999 for ik3d)
+
+### Fortran Source Changes Summary
+
+#### kt3d.for / kt3d.inc
+- **kt3d.inc**: Added `imask` to `/datcom/` common block, added `maskfl` character variable with `/maskcom/`
+- **geostat module**: Added `integer*1,allocatable :: gridmask(:)`
+- **readparm**: Added `read(lin,*) imask` and conditional `read(lin,'(a512)') maskfl` after ibinary
+- **Mask read**: After `close(lin)`, allocate and read mask file if `imask=1`
+- **Main loop**: Skip masked cells with `go to 1` after setting `est=UNEST, estv=UNEST`
+- **makepar**: Added imask/maskfl parameter lines
+
+#### ik3d.for / ik3d.inc
+- **ik3d.inc**: Added `imask` to `/datcom/`, added `maskfl` and `/maskcom/`
+- **geostat module**: Added `integer*1,allocatable :: gridmask(:)`
+- **readparm**: Added imask/maskfl reading after ibinary
+- **Mask read**: After `close(lin)`, allocate and read mask file
+- **Main loop**: Skip masked cells, set all `ccdfo(ic) = UNEST` and `go to 1`
+- **makepar**: Added imask/maskfl parameter lines
+
+#### sgsim.for / sgsim.inc
+- **sgsim.inc**: Added `imask` to `/generl/`, added `maskfl` and `/maskcom/`
+- **geostat module**: Added `integer*1,allocatable :: gridmask(:)`
+- **readparm**: Added imask/maskfl reading after ibinary
+- **Mask read**: After `close(lin)`, allocate and read mask file
+- **Main loop**: After `index = order(in)`, check mask and set `sim(index) = UNEST`, `go to 5`
+- **makepar**: Added imask/maskfl parameter lines
+
+#### sisim.for / sisim.inc
+- **sisim.inc**: Added `imask` to `/simula/`, added `maskfl` and `/maskcom/`
+- **geostat module**: Added `integer*1,allocatable :: gridmask(:)`
+- **readparm**: Added imask/maskfl reading after ibinary
+- **Mask read**: After `close(lin)`, allocate and read mask file
+- **Main loop**: After `index = int(order(in)+0.5)`, check mask and set `sim(index) = UNEST`, `go to 20`
+- **makepar**: Added imask/maskfl parameter lines
+
+### Python API
+
+All four grid programs (kt3d, ik3d, sgsim, sisim) now accept an optional `mask` parameter:
+```python
+result = kt3d(
+    x, y, z, values,
+    grid=grid,
+    variogram=variogram,
+    search=search,
+    mask=mask_array,  # np.ndarray of shape (nz, ny, nx), dtype=int8
+)
+```
+- Mask must match grid dimensions exactly
+- Masked cells (mask=0) have placeholder values in output
 
 ---
 
@@ -180,20 +238,20 @@ Python wrapper detects available binaries and exposes `precision='f32'|'f64'` pa
 
 ## Version Milestones
 
-| Version | Features |
-|---------|----------|
-| v0.1    | Initial release - ASCII I/O, all 8 programs |
-| v0.2    | Binary I/O for all programs |
-| v0.3    | Grid mask support |
-| v0.4    | Double precision builds |
-| v1.0    | Stable API, full documentation |
+| Version | Features | Status |
+|---------|----------|--------|
+| v0.1    | Initial release - ASCII I/O, all 8 programs | ✅ Complete |
+| v0.2    | Binary I/O for all programs | ✅ Complete |
+| v0.3    | Grid mask support | ✅ Complete |
+| v0.4    | Double precision builds | ⬜ Planned |
+| v1.0    | Stable API, full documentation | ⬜ Planned |
 
 ---
 
 ## Contributing
 
 Priority areas for contribution:
-1. Binary I/O implementation for remaining programs
-2. Test coverage for edge cases
-3. Documentation and examples
-4. Performance benchmarks (ASCII vs binary)
+1. Test coverage for edge cases
+2. Documentation and examples
+3. Performance benchmarks (ASCII vs binary vs masked)
+4. Double precision build implementation

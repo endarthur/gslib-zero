@@ -56,7 +56,9 @@ c
      +                nd,itrans,ntr,idbg,lin,lout,ldbg,llvm,icollvm,
      +                nvaril,ktype,colocorr,test,
      +                ltail,ltpar,utail,utpar,zmin,zmax,varred,
-     +                ibinary
+     +                ibinary,imask
+      character*512 maskfl
+      common /maskcom/ maskfl
 
       common /search/ radius,radsqd,sang1,sang2,sang3,sanis1,sanis2,
      +                noct,nclose,ndmin,ndmax,sstrat,mults,nmult,

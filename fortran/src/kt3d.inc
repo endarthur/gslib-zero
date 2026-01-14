@@ -67,7 +67,9 @@ c
      +                nydis,nzdis,idrif,itrend,ktype,skmean,koption,
      +                idbg,ldbg,iout,lout,iext,lext,iextve,ljack,
      +                idhlj,ixlj,iylj,izlj,ivrlj,iextvj,nvarij,
-     +                ibinary
+     +                ibinary,imask
+      character*512 maskfl
+      common /maskcom/ maskfl
 c
 c Variogram Parameters:
 c

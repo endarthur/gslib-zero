@@ -29,16 +29,17 @@ c
 c Module to declare dynamic arrays in multiple subroutines:
 c
       module geostat
-      
+
       integer,allocatable :: nisb(:),it(:),nst(:),nviol(:),
      +        ixsbtosr(:),iysbtosr(:),izsbtosr(:)
+      integer*1,allocatable :: gridmask(:)
       real,allocatable    :: x(:),y(:),z(:),vr(:,:),tmp(:),xa(:),
      +        ya(:),za(:),vra(:),close(:),actloc(:),gcdf(:),sb(:),
      +        ccdf(:),ccdfo(:),aviol(:),xviol(:),thres(:),c0(:),cc(:),
      +        aa(:),ang1(:),ang2(:),ang3(:),anis1(:),anis2(:),dh(:),
      +        sdis(:)
       real*8,allocatable  :: r(:),s(:),a(:),rotmat(:,:,:)
-      
+
       end module
 c
 c
@@ -96,6 +97,7 @@ c     use msflib  ! Removed for gfortran compatibility
       include  'ik3d.inc'
       parameter(MV=100)
       integer   ivrs(MAXCUT)
+      integer   ndim_m,nx_m,ny_m,nz_m,nxyz
       real      var(MV)
       character datafl*512,softfl*512,outfl*512,dbgfl*512,jackfl*512,
      +          str*512
@@ -331,6 +333,14 @@ c
       read(lin,*,err=98) ibinary
       write(*,*) ' binary output = ',ibinary
 
+      read(lin,*,err=98) imask
+      write(*,*) ' use grid mask = ',imask
+      if(imask.eq.1) then
+            read(lin,'(a512)',err=98) maskfl
+            call chknam(maskfl,512)
+            write(*,*) ' mask file = ',maskfl(1:40)
+      end if
+
       read(lin,*,err=98) nx,xmn,xsiz
       write(*,*) ' nx, xmn, xsiz = ',nx,xmn,xsiz
 
@@ -496,6 +506,30 @@ c
             end do
       end do
       close(lin)
+c
+c Read grid mask if enabled:
+c
+      if(imask.eq.1) then
+            nxyz = nx*ny*nz
+            allocate(gridmask(nxyz),stat = test)
+            if(test.ne.0)then
+                  write(*,*)'ERROR: Allocation of gridmask failed'
+                  stop
+            end if
+            open(9,file=maskfl,status='OLD',access='STREAM',
+     +           form='UNFORMATTED',err=97)
+            read(9) ndim_m, nz_m, ny_m, nx_m
+            if(nx_m.ne.nx.or.ny_m.ne.ny.or.nz_m.ne.nz) then
+                  write(*,*) 'ERROR: Mask dimensions do not match grid'
+                  write(*,*) '  Grid: ',nx,ny,nz
+                  write(*,*) '  Mask: ',nx_m,ny_m,nz_m
+                  stop
+            end if
+            read(9) (gridmask(i),i=1,nxyz)
+            close(9)
+            write(*,*) ' Mask loaded: ',nxyz,' cells'
+      end if
+c
  100  format(/,' Category  number ',i2,' = ',f12.3,/,
      +         '           global prob value = ',f8.4,/,
      +         '           number of structures = ',i3,/,
@@ -964,6 +998,17 @@ c
             if(ivrlj.gt.0)  true   = var(ivrlj)
       end if
 c
+c Check grid mask - skip if inactive (grid mode only):
+c
+      if(imask.eq.1.and.koption.eq.0) then
+            if(gridmask(index).eq.0) then
+                  do ic=1,ncut
+                        ccdfo(ic) = UNEST
+                  end do
+                  go to 1
+            end if
+      end if
+c
 c Find the nearest samples:
 c
             call srchsupr(xloc,yloc,zloc,radsqd,isrot,MAXROT,rotmat,
@@ -1255,6 +1300,9 @@ c-----------------------------------------------------------------------
       write(lun,251)
  251  format('0                                ',
      +       '-binary output (0=no, 1=yes)')
+      write(lun,252)
+ 252  format('0                                ',
+     +       '-0=no mask, 1=use grid mask')
       write(lun,26)
  26   format('10   2.5    5.0                  ',
      +       '-nx,xmn,xsiz')

@@ -29,13 +29,14 @@ c
 c Module to declare dynamic arrays in multiple subroutines:
 c
       module geostat
-      
+
       integer,allocatable :: nisb(:),ixsbtosr(:),iysbtosr(:),izsbtosr(:)
+      integer*1,allocatable :: gridmask(:)
       real,allocatable    :: x(:),y(:),z(:),vr(:),ve(:),dh(:),tmp(:),
      +          close(:),xa(:),ya(:),za(:),vra(:),vea(:),xdb(:),ydb(:),
      +          zdb(:),cut(:),cdf(:)
       real*8,allocatable  :: r(:),rr(:),s(:),a(:)
-      
+
       end module
 c
 c
@@ -95,6 +96,7 @@ c     use       msflib  ! Removed for gfortran compatibility
       include  'kt3d.inc'
       parameter(MV=100)
       real      var(MV)
+      integer   ndim_m,nx_m,ny_m,nz_m,nxyz
       character datafl*512,jackfl*512,extfl*512,outfl*512,dbgfl*512,
      +          str*512,title*80
       logical   testfl
@@ -217,6 +219,14 @@ c
       read(lin,*,err=98) ibinary
       write(*,*) ' binary output = ',ibinary
 
+      read(lin,*,err=98) imask
+      write(*,*) ' use grid mask = ',imask
+      if(imask.eq.1) then
+            read(lin,'(a512)',err=98) maskfl
+            call chknam(maskfl,512)
+            write(*,*) ' mask file = ',maskfl(1:40)
+      end if
+
       read(lin,*,err=98) nx,xmn,xsiz
       write(*,*) ' nx, xmn, xsiz = ',nx,xmn,xsiz
 
@@ -286,6 +296,29 @@ c
       end do
 
       close(lin)
+c
+c Read grid mask if enabled:
+c
+      if(imask.eq.1) then
+            nxyz = nx*ny*nz
+            allocate(gridmask(nxyz),stat = test)
+            if(test.ne.0)then
+                  write(*,*)'ERROR: Allocation of gridmask failed'
+                  stop
+            end if
+            open(9,file=maskfl,status='OLD',access='STREAM',
+     +           form='UNFORMATTED',err=97)
+            read(9) ndim_m, nz_m, ny_m, nx_m
+            if(nx_m.ne.nx.or.ny_m.ne.ny.or.nz_m.ne.nz) then
+                  write(*,*) 'ERROR: Mask dimensions do not match grid'
+                  write(*,*) '  Grid: ',nx,ny,nz
+                  write(*,*) '  Mask: ',nx_m,ny_m,nz_m
+                  stop
+            end if
+            read(9) (gridmask(i),i=1,nxyz)
+            close(9)
+            write(*,*) ' Mask loaded: ',nxyz,' cells'
+      end if
 c
 c Find the needed parameters:
 c
@@ -960,7 +993,16 @@ c
             if(iextvj.gt.0) extest = var(iextvj)
             if(true.lt.tmin.or.true.ge.tmax) true = UNEST
       end if
-
+c
+c Check grid mask - skip if inactive (grid mode only):
+c
+      if(imask.eq.1.and.koption.eq.0) then
+            if(gridmask(index).eq.0) then
+                  est  = UNEST
+                  estv = UNEST
+                  go to 1
+            end if
+      end if
 c
 c Read in the external drift variable for this grid node if needed:
 c
@@ -1463,6 +1505,9 @@ c-----------------------------------------------------------------------
       write(lun,119)
  119  format('0                                ',
      +       '-0=ASCII output, 1=binary output')
+      write(lun,120)
+ 120  format('0                                ',
+     +       '-0=no mask, 1=use grid mask')
       write(lun,20)
  20   format('50   0.5    1.0                  ',
      +       '-nx,xmn,xsiz')
