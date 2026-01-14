@@ -15,7 +15,7 @@ import numpy as np
 
 import warnings
 
-from gslib_zero.core import AsciiIO, BinaryIO, ExperimentalWarning, GSLIBWorkspace, run_gslib
+from gslib_zero.core import AsciiIO, BinaryIO, ExperimentalWarning, GSLIBWorkspace, run_gslib, _extract_points
 from gslib_zero.par import ParFileBuilder
 from gslib_zero.utils import GridSpec, VariogramModel
 
@@ -48,28 +48,36 @@ class SearchParameters:
 
 
 def kt3d(
-    x: NDArray[np.floating],
-    y: NDArray[np.floating],
-    z: NDArray[np.floating],
-    values: NDArray[np.floating],
-    grid: GridSpec,
-    variogram: VariogramModel,
-    search: SearchParameters,
+    x=None,
+    y=None,
+    z=None,
+    values=None,
+    grid: GridSpec = None,
+    variogram: VariogramModel = None,
+    search: SearchParameters = None,
     kriging_type: Literal["simple", "ordinary"] = "ordinary",
     sk_mean: float = 0.0,
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
     block_discretization: tuple[int, int, int] = (1, 1, 1),
     binary: bool = False,
-    mask: NDArray[np.integer] | None = None,
+    mask=None,
     precision: Literal["f32", "f64"] = "f32",
+    *,
+    data=None,
+    x_col: str = "x",
+    y_col: str = "y",
+    z_col: str = "z",
+    value_col: str | None = None,
 ) -> KrigingResult:
     """
     3D kriging estimation using kt3d.
 
+    Accepts either direct arrays/Series or a DataFrame with column names.
+
     Args:
-        x, y, z: Sample coordinates (1D arrays)
-        values: Sample values (1D array)
+        x, y, z: Sample coordinates (array-like: ndarray, Series, list)
+        values: Sample values (array-like)
         grid: Grid specification for output
         variogram: Variogram model
         search: Search neighborhood parameters
@@ -83,9 +91,19 @@ def kt3d(
               Masked cells will have UNEST (-999) in output.
         precision: 'f32' for single precision (default), 'f64' for double precision.
                    Requires corresponding binaries (kt3d vs kt3d_f64).
+        data: DataFrame or dict with columns (alternative to x, y, z, values)
+        x_col, y_col, z_col: Column names for coordinates (default 'x', 'y', 'z')
+        value_col: Column name for values (required when using data)
 
     Returns:
         KrigingResult with estimate, variance, and grid spec
+
+    Examples:
+        # Using arrays or Series directly
+        result = kt3d(df.x, df.y, df.z, df.au, grid, variogram, search)
+
+        # Using DataFrame with column names
+        result = kt3d(data=df, value_col='au', grid=grid, variogram=variogram, search=search)
 
     Note:
         The f64 precision option is experimental. The f64 builds are provided
@@ -99,15 +117,9 @@ def kt3d(
             stacklevel=2,
         )
 
-    # Validate inputs
-    x = np.asarray(x, dtype=np.float64).ravel()
-    y = np.asarray(y, dtype=np.float64).ravel()
-    z = np.asarray(z, dtype=np.float64).ravel()
-    values = np.asarray(values, dtype=np.float64).ravel()
-
+    # Extract and validate inputs
+    x, y, z, values = _extract_points(x, y, z, values, data, x_col, y_col, z_col, value_col)
     n = len(x)
-    if not (len(y) == len(z) == len(values) == n):
-        raise ValueError("All input arrays must have the same length")
 
     # Kriging type: 0=SK, 1=OK
     ktype = 0 if kriging_type == "simple" else 1
@@ -252,15 +264,15 @@ class IndicatorKrigingResult:
 
 
 def ik3d(
-    x: NDArray[np.floating],
-    y: NDArray[np.floating],
-    z: NDArray[np.floating],
-    values: NDArray[np.floating],
-    grid: GridSpec,
-    cutoffs: list[float],
-    global_cdf: list[float],
-    variograms: list[VariogramModel],
-    search: SearchParameters,
+    x=None,
+    y=None,
+    z=None,
+    values=None,
+    grid: GridSpec = None,
+    cutoffs: list[float] = None,
+    global_cdf: list[float] = None,
+    variograms: list[VariogramModel] = None,
+    search: SearchParameters = None,
     kriging_type: Literal["simple", "ordinary"] = "ordinary",
     indicator_type: Literal["continuous", "categorical"] = "continuous",
     median_ik: bool = False,
@@ -268,15 +280,23 @@ def ik3d(
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
     binary: bool = False,
-    mask: NDArray[np.integer] | None = None,
+    mask=None,
     precision: Literal["f32", "f64"] = "f32",
+    *,
+    data=None,
+    x_col: str = "x",
+    y_col: str = "y",
+    z_col: str = "z",
+    value_col: str | None = None,
 ) -> IndicatorKrigingResult:
     """
     Indicator kriging using ik3d.
 
+    Accepts either direct arrays/Series or a DataFrame with column names.
+
     Args:
-        x, y, z: Sample coordinates (1D arrays)
-        values: Sample values (1D array)
+        x, y, z: Sample coordinates (array-like: ndarray, Series, list)
+        values: Sample values (array-like)
         grid: Grid specification for output
         cutoffs: List of indicator cutoff values
         global_cdf: Global CDF/PDF values for each cutoff (same length as cutoffs)
@@ -292,9 +312,19 @@ def ik3d(
               Masked cells will have UNEST (-999) in output.
         precision: 'f32' for single precision (default), 'f64' for double precision.
                    Requires corresponding binaries (ik3d vs ik3d_f64).
+        data: DataFrame or dict with columns (alternative to x, y, z, values)
+        x_col, y_col, z_col: Column names for coordinates (default 'x', 'y', 'z')
+        value_col: Column name for values (required when using data)
 
     Returns:
         IndicatorKrigingResult with probabilities array of shape (ncut, nz, ny, nx)
+
+    Examples:
+        # Using arrays or Series directly
+        result = ik3d(df.x, df.y, df.z, df.au, grid, cutoffs, global_cdf, variograms, search)
+
+        # Using DataFrame with column names
+        result = ik3d(data=df, value_col='au', grid=grid, cutoffs=cutoffs, ...)
 
     Note:
         The f64 precision option is experimental. The f64 builds are provided
@@ -308,11 +338,8 @@ def ik3d(
             stacklevel=2,
         )
 
-    x = np.asarray(x, dtype=np.float64).ravel()
-    y = np.asarray(y, dtype=np.float64).ravel()
-    z = np.asarray(z, dtype=np.float64).ravel()
-    values = np.asarray(values, dtype=np.float64).ravel()
-
+    # Extract and validate inputs
+    x, y, z, values = _extract_points(x, y, z, values, data, x_col, y_col, z_col, value_col)
     n = len(x)
     ncut = len(cutoffs)
 

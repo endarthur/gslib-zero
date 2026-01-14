@@ -13,12 +13,120 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
+
+# Type alias for array-like inputs (ndarray, Series, list, etc.)
+ArrayLike = "NDArray | list | tuple | Any"
+
+
+def _coerce_array(arr: ArrayLike, dtype: type = np.float64) -> NDArray:
+    """
+    Coerce array-like input to numpy array.
+
+    Handles:
+    - numpy arrays (pass through with dtype conversion if needed)
+    - pandas Series (extracted to array)
+    - lists, tuples (converted to array)
+    - any object with __array__ protocol
+
+    Args:
+        arr: Array-like input
+        dtype: Target dtype (default float64)
+
+    Returns:
+        Numpy array
+    """
+    return np.asarray(arr, dtype=dtype)
+
+
+def _extract_points(
+    x: ArrayLike | None,
+    y: ArrayLike | None,
+    z: ArrayLike | None,
+    values: ArrayLike | None,
+    data: Any | None,
+    x_col: str,
+    y_col: str,
+    z_col: str,
+    value_col: str | None,
+) -> tuple[NDArray, NDArray, NDArray, NDArray]:
+    """
+    Extract x, y, z, values arrays from either direct arrays or DataFrame.
+
+    Supports two patterns:
+    1. Direct arrays/Series: x, y, z, values provided directly
+    2. DataFrame: data provided with column names
+
+    Args:
+        x, y, z, values: Direct array-like inputs (or None if using data)
+        data: DataFrame or dict-like with columns (or None if using arrays)
+        x_col, y_col, z_col: Column names for coordinates (default 'x', 'y', 'z')
+        value_col: Column name for values (required when using data)
+
+    Returns:
+        Tuple of (x, y, z, values) as numpy arrays
+
+    Raises:
+        ValueError: If neither arrays nor data provided, or if value_col missing
+    """
+    if data is not None:
+        # DataFrame/dict mode
+        if value_col is None:
+            raise ValueError(
+                "value_col is required when using data parameter. "
+                "Example: kt3d(data=df, value_col='grade', ...)"
+            )
+        x_arr = _coerce_array(data[x_col])
+        y_arr = _coerce_array(data[y_col])
+        z_arr = _coerce_array(data[z_col])
+        values_arr = _coerce_array(data[value_col])
+    else:
+        # Direct arrays mode
+        if x is None or y is None or z is None or values is None:
+            raise ValueError(
+                "x, y, z, and values are required when not using data parameter"
+            )
+        x_arr = _coerce_array(x)
+        y_arr = _coerce_array(y)
+        z_arr = _coerce_array(z)
+        values_arr = _coerce_array(values)
+
+    # Validate lengths match
+    n = len(x_arr)
+    if len(y_arr) != n or len(z_arr) != n or len(values_arr) != n:
+        raise ValueError(
+            f"Array lengths must match: x={len(x_arr)}, y={len(y_arr)}, "
+            f"z={len(z_arr)}, values={len(values_arr)}"
+        )
+
+    return x_arr, y_arr, z_arr, values_arr
+
+
+def _extract_points_optional(
+    x: ArrayLike | None,
+    y: ArrayLike | None,
+    z: ArrayLike | None,
+    values: ArrayLike | None,
+    data: Any | None,
+    x_col: str,
+    y_col: str,
+    z_col: str,
+    value_col: str | None,
+) -> tuple[NDArray | None, NDArray | None, NDArray | None, NDArray | None]:
+    """
+    Extract x, y, z, values arrays, allowing all None (for unconditional simulation).
+
+    Same as _extract_points but returns (None, None, None, None) if no data provided.
+    """
+    if data is None and x is None and y is None and z is None and values is None:
+        return None, None, None, None
+
+    return _extract_points(x, y, z, values, data, x_col, y_col, z_col, value_col)
 
 
 class ExperimentalWarning(UserWarning):

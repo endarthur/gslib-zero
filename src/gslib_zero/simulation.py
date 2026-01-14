@@ -15,7 +15,7 @@ import numpy as np
 
 import warnings
 
-from gslib_zero.core import AsciiIO, BinaryIO, ExperimentalWarning, GSLIBWorkspace, run_gslib
+from gslib_zero.core import AsciiIO, BinaryIO, ExperimentalWarning, GSLIBWorkspace, run_gslib, _extract_points_optional, _coerce_array
 from gslib_zero.par import ParFileBuilder
 from gslib_zero.utils import GridSpec, VariogramModel
 
@@ -32,13 +32,13 @@ class SimulationResult:
 
 
 def sgsim(
-    x: NDArray[np.floating] | None,
-    y: NDArray[np.floating] | None,
-    z: NDArray[np.floating] | None,
-    values: NDArray[np.floating] | None,
-    grid: GridSpec,
-    variogram: VariogramModel,
-    search_radius: tuple[float, float, float],
+    x=None,
+    y=None,
+    z=None,
+    values=None,
+    grid: GridSpec = None,
+    variogram: VariogramModel = None,
+    search_radius: tuple[float, float, float] = None,
     nrealizations: int = 1,
     seed: int = 69069,
     max_conditioning: int = 32,
@@ -50,17 +50,26 @@ def sgsim(
     tmax: float = 1.0e21,
     search_angles: tuple[float, float, float] = (0.0, 0.0, 0.0),
     binary: bool = False,
-    mask: NDArray[np.integer] | None = None,
+    mask=None,
     precision: Literal["f32", "f64"] = "f32",
+    *,
+    data=None,
+    x_col: str = "x",
+    y_col: str = "y",
+    z_col: str = "z",
+    value_col: str | None = None,
 ) -> SimulationResult:
     """
     Sequential Gaussian simulation using sgsim.
+
+    Accepts either direct arrays/Series or a DataFrame with column names.
+    Pass None for x, y, z, values (and no data) for unconditional simulation.
 
     Note: Input values should already be normal scores. Use nscore() first
     to transform your data if needed.
 
     Args:
-        x, y, z: Conditioning data coordinates (None for unconditional)
+        x, y, z: Conditioning data coordinates (array-like, or None for unconditional)
         values: Conditioning data values (should be normal scores)
         grid: Grid specification for output
         variogram: Variogram model (for normal scores)
@@ -79,9 +88,22 @@ def sgsim(
               Masked cells output UNEST (-999).
         precision: 'f32' for single precision (default), 'f64' for double precision.
                    Requires corresponding binaries (sgsim vs sgsim_f64).
+        data: DataFrame or dict with columns (alternative to x, y, z, values)
+        x_col, y_col, z_col: Column names for coordinates (default 'x', 'y', 'z')
+        value_col: Column name for values (required when using data)
 
     Returns:
         SimulationResult with realizations array
+
+    Examples:
+        # Conditional simulation using arrays or Series
+        result = sgsim(df.x, df.y, df.z, df.ns_value, grid, variogram, search_radius)
+
+        # Conditional simulation using DataFrame
+        result = sgsim(data=df, value_col='ns_value', grid=grid, variogram=variogram, ...)
+
+        # Unconditional simulation
+        result = sgsim(grid=grid, variogram=variogram, search_radius=(100, 100, 10))
 
     Raises:
         NotImplementedError: If precision='f64' is requested. The sgsim_f64 binary
@@ -95,21 +117,19 @@ def sgsim(
             "See https://github.com/arthurendo/gslib-zero for updates."
         )
 
-    # Handle unconditional case
-    if x is None or values is None:
-        n = 0
+    # Extract conditioning data (or None for unconditional)
+    x, y, z, values = _extract_points_optional(x, y, z, values, data, x_col, y_col, z_col, value_col)
+
+    if x is None:
+        # Unconditional simulation
         x = np.array([], dtype=np.float64)
         y = np.array([], dtype=np.float64)
         z = np.array([], dtype=np.float64)
         values = np.array([], dtype=np.float64)
         has_data = False
     else:
-        x = np.asarray(x, dtype=np.float64).ravel()
-        y = np.asarray(y, dtype=np.float64).ravel()
-        z = np.asarray(z, dtype=np.float64).ravel()
-        values = np.asarray(values, dtype=np.float64).ravel()
-        n = len(x)
         has_data = True
+        n = len(x)
 
     # Kriging type: 0=SK, 1=OK
     ktype = 0 if kriging_type == "simple" else 1
@@ -265,15 +285,15 @@ def sgsim(
 
 
 def sisim(
-    x: NDArray[np.floating] | None,
-    y: NDArray[np.floating] | None,
-    z: NDArray[np.floating] | None,
-    values: NDArray[np.floating] | None,
-    grid: GridSpec,
-    thresholds: list[float],
-    global_cdf: list[float],
-    variograms: list[VariogramModel],
-    search_radius: tuple[float, float, float],
+    x=None,
+    y=None,
+    z=None,
+    values=None,
+    grid: GridSpec = None,
+    thresholds: list[float] = None,
+    global_cdf: list[float] = None,
+    variograms: list[VariogramModel] = None,
+    search_radius: tuple[float, float, float] = None,
     nrealizations: int = 1,
     seed: int = 69069,
     max_conditioning: int = 12,
@@ -285,14 +305,23 @@ def sisim(
     search_angles: tuple[float, float, float] = (0.0, 0.0, 0.0),
     kriging_type: str = "simple",
     binary: bool = False,
-    mask: NDArray[np.integer] | None = None,
+    mask=None,
     precision: Literal["f32", "f64"] = "f32",
+    *,
+    data=None,
+    x_col: str = "x",
+    y_col: str = "y",
+    z_col: str = "z",
+    value_col: str | None = None,
 ) -> SimulationResult:
     """
     Sequential indicator simulation using sisim.
 
+    Accepts either direct arrays/Series or a DataFrame with column names.
+    Pass None for x, y, z, values (and no data) for unconditional simulation.
+
     Args:
-        x, y, z: Conditioning data coordinates (None for unconditional)
+        x, y, z: Conditioning data coordinates (array-like, or None for unconditional)
         values: Conditioning data values (continuous variable)
         grid: Grid specification for output
         thresholds: List of indicator thresholds/cutoff values
@@ -312,9 +341,22 @@ def sisim(
               Masked cells output UNEST (-99).
         precision: 'f32' for single precision (default), 'f64' for double precision.
                    Requires corresponding binaries (sisim vs sisim_f64).
+        data: DataFrame or dict with columns (alternative to x, y, z, values)
+        x_col, y_col, z_col: Column names for coordinates (default 'x', 'y', 'z')
+        value_col: Column name for values (required when using data)
 
     Returns:
         SimulationResult with realizations array (simulated values)
+
+    Examples:
+        # Conditional simulation using arrays or Series
+        result = sisim(df.x, df.y, df.z, df.grade, grid, thresholds, global_cdf, variograms, ...)
+
+        # Conditional simulation using DataFrame
+        result = sisim(data=df, value_col='grade', grid=grid, thresholds=thresholds, ...)
+
+        # Unconditional simulation
+        result = sisim(grid=grid, thresholds=thresholds, global_cdf=global_cdf, ...)
 
     Note:
         The f64 precision option is experimental. The f64 builds are provided
@@ -334,14 +376,12 @@ def sisim(
     if len(global_cdf) != ncut:
         raise ValueError(f"Need {ncut} global CDF values for {ncut} thresholds")
 
-    # Handle unconditional case
-    if x is None or values is None:
+    # Extract conditioning data (or None for unconditional)
+    x, y, z, values = _extract_points_optional(x, y, z, values, data, x_col, y_col, z_col, value_col)
+
+    if x is None:
         has_data = False
     else:
-        x = np.asarray(x, dtype=np.float64).ravel()
-        y = np.asarray(y, dtype=np.float64).ravel()
-        z = np.asarray(z, dtype=np.float64).ravel()
-        values = np.asarray(values, dtype=np.float64).ravel()
         has_data = True
 
     # Kriging type: 0=SK, 1=OK

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib
+from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib, _extract_points
 from gslib_zero.par import ParFileBuilder
 
 if TYPE_CHECKING:
@@ -30,12 +30,12 @@ class DeclusResult:
 
 
 def declus(
-    x: NDArray[np.floating],
-    y: NDArray[np.floating],
-    z: NDArray[np.floating],
-    values: NDArray[np.floating],
-    cell_min: float,
-    cell_max: float,
+    x=None,
+    y=None,
+    z=None,
+    values=None,
+    cell_min: float = None,
+    cell_max: float = None,
     n_cells: int = 10,
     anisotropy_y: float = 1.0,
     anisotropy_z: float = 1.0,
@@ -44,13 +44,21 @@ def declus(
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
     binary: bool = False,
+    *,
+    data=None,
+    x_col: str = "x",
+    y_col: str = "y",
+    z_col: str = "z",
+    value_col: str | None = None,
 ) -> DeclusResult:
     """
     Cell declustering to compute sample weights.
 
+    Accepts either direct arrays/Series or a DataFrame with column names.
+
     Args:
-        x, y, z: Sample coordinates (1D arrays)
-        values: Sample values (1D array)
+        x, y, z: Sample coordinates (array-like: ndarray, Series, list)
+        values: Sample values (array-like)
         cell_min: Minimum cell size to test
         cell_max: Maximum cell size to test
         n_cells: Number of cell sizes to test between min and max
@@ -61,18 +69,23 @@ def declus(
         tmin: Minimum trimming limit
         tmax: Maximum trimming limit
         binary: If True, use binary I/O (requires gslib-zero modified binaries)
+        data: DataFrame or dict with columns (alternative to x, y, z, values)
+        x_col, y_col, z_col: Column names for coordinates (default 'x', 'y', 'z')
+        value_col: Column name for values (required when using data)
 
     Returns:
         DeclusResult with weights, declustered mean, and optimal cell size
-    """
-    x = np.asarray(x, dtype=np.float64).ravel()
-    y = np.asarray(y, dtype=np.float64).ravel()
-    z = np.asarray(z, dtype=np.float64).ravel()
-    values = np.asarray(values, dtype=np.float64).ravel()
 
+    Examples:
+        # Using arrays or Series directly
+        result = declus(df.x, df.y, df.z, df.au, cell_min=50, cell_max=200)
+
+        # Using DataFrame with column names
+        result = declus(data=df, value_col='au', cell_min=50, cell_max=200)
+    """
+    # Extract and validate inputs
+    x, y, z, values = _extract_points(x, y, z, values, data, x_col, y_col, z_col, value_col)
     n = len(x)
-    if not (len(y) == len(z) == len(values) == n):
-        raise ValueError("All input arrays must have the same length")
 
     with GSLIBWorkspace() as workspace:
         data_file = workspace / "declus_input.dat"

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib
+from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib, _extract_points
 from gslib_zero.par import ParFileBuilder
 
 if TYPE_CHECKING:
@@ -67,12 +67,12 @@ VARIOGRAM_TYPES = {
 
 
 def gamv(
-    x: NDArray[np.floating],
-    y: NDArray[np.floating],
-    z: NDArray[np.floating],
-    values: NDArray[np.floating],
-    nlag: int,
-    lag_distance: float,
+    x=None,
+    y=None,
+    z=None,
+    values=None,
+    nlag: int = None,
+    lag_distance: float = None,
     lag_tolerance: float | None = None,
     directions: list[GamvDirection] | None = None,
     variogram_type: int | str = 1,
@@ -80,13 +80,21 @@ def gamv(
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
     binary: bool = False,
+    *,
+    data=None,
+    x_col: str = "x",
+    y_col: str = "y",
+    z_col: str = "z",
+    value_col: str | None = None,
 ) -> list[VariogramResult]:
     """
     Calculate experimental variogram from sample data.
 
+    Accepts either direct arrays/Series or a DataFrame with column names.
+
     Args:
-        x, y, z: Sample coordinates (1D arrays)
-        values: Sample values (1D array)
+        x, y, z: Sample coordinates (array-like: ndarray, Series, list)
+        values: Sample values (array-like)
         nlag: Number of lags
         lag_distance: Lag distance/spacing
         lag_tolerance: Lag tolerance (default: half lag distance)
@@ -103,19 +111,23 @@ def gamv(
         standardize_sill: If True, standardize sill to 1.0
         tmin, tmax: Trimming limits
         binary: If True, use binary I/O (requires gslib-zero modified binaries)
+        data: DataFrame or dict with columns (alternative to x, y, z, values)
+        x_col, y_col, z_col: Column names for coordinates (default 'x', 'y', 'z')
+        value_col: Column name for values (required when using data)
 
     Returns:
         List of VariogramResult objects, one per direction
-    """
-    # Validate and prepare inputs
-    x = np.asarray(x, dtype=np.float64).ravel()
-    y = np.asarray(y, dtype=np.float64).ravel()
-    z = np.asarray(z, dtype=np.float64).ravel()
-    values = np.asarray(values, dtype=np.float64).ravel()
 
+    Examples:
+        # Using arrays or Series directly
+        result = gamv(df.x, df.y, df.z, df.au, nlag=15, lag_distance=20)
+
+        # Using DataFrame with column names
+        result = gamv(data=df, value_col='au', nlag=15, lag_distance=20)
+    """
+    # Extract and validate inputs
+    x, y, z, values = _extract_points(x, y, z, values, data, x_col, y_col, z_col, value_col)
     n = len(x)
-    if not (len(y) == len(z) == len(values) == n):
-        raise ValueError("All input arrays must have the same length")
 
     if lag_tolerance is None:
         lag_tolerance = lag_distance / 2.0
