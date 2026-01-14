@@ -371,3 +371,155 @@ def rotation_matrix_deutsch(
         [r21, r22, r23],
         [r31, r32, r33],
     ], dtype=np.float64)
+
+
+def dipdirection_to_deutsch(
+    dip_direction: float, dip: float, rake: float = 0.0
+) -> tuple[float, float, float]:
+    """
+    Convert Dip Direction / Dip convention to Deutsch (GSLIB) convention.
+
+    This is a common mining convention where orientation is specified by:
+    - dip_direction: Direction of maximum dip (0-360, CW from North)
+    - dip: Angle of maximum dip from horizontal (0-90, always positive)
+    - rake: Rotation within the plane (optional)
+
+    GSLIB azimuth is the strike direction, 90° counter-clockwise from dip direction.
+    """
+    # Strike (azimuth) is perpendicular to dip direction
+    azimuth = (dip_direction - 90.0) % 360.0
+    return (azimuth, dip, rake)
+
+
+def deutsch_to_dipdirection(
+    azimuth: float, dip: float, rake: float
+) -> tuple[float, float, float]:
+    """
+    Convert Deutsch (GSLIB) convention to Dip Direction / Dip convention.
+
+    See dipdirection_to_deutsch for convention definitions.
+    """
+    dip_direction = (azimuth + 90.0) % 360.0
+    return (dip_direction, abs(dip), rake)
+
+
+def datamine_to_deutsch(
+    dip_direction: float, dip: float, plunge: float = 0.0
+) -> tuple[float, float, float]:
+    """
+    Convert Datamine convention to Deutsch (GSLIB) convention.
+
+    Datamine uses:
+    - dip_direction: Direction of maximum dip (0-360, CW from North)
+    - dip: Angle of dip from horizontal (0-90)
+    - plunge: Pitch/rake angle within the plane
+
+    This is essentially the same as Dip Direction / Dip convention.
+    """
+    return dipdirection_to_deutsch(dip_direction, dip, plunge)
+
+
+def deutsch_to_datamine(
+    azimuth: float, dip: float, rake: float
+) -> tuple[float, float, float]:
+    """
+    Convert Deutsch (GSLIB) convention to Datamine convention.
+
+    See datamine_to_deutsch for convention definitions.
+    """
+    return deutsch_to_dipdirection(azimuth, dip, rake)
+
+
+def vulcan_to_deutsch(
+    strike: float, dip: float, rake: float = 0.0
+) -> tuple[float, float, float]:
+    """
+    Convert Vulcan (Strike/Dip) convention to Deutsch (GSLIB) convention.
+
+    Vulcan uses right-hand rule:
+    - strike: Direction of horizontal line on plane (0-360, CW from North)
+    - dip: Angle of dip from horizontal (0-90)
+    - Dip direction is 90° clockwise from strike
+
+    In GSLIB, azimuth IS the strike direction, so the conversion is direct.
+    """
+    # GSLIB azimuth is strike
+    azimuth = strike % 360.0
+    return (azimuth, dip, rake)
+
+
+def deutsch_to_vulcan(
+    azimuth: float, dip: float, rake: float
+) -> tuple[float, float, float]:
+    """
+    Convert Deutsch (GSLIB) convention to Vulcan (Strike/Dip) convention.
+
+    See vulcan_to_deutsch for convention definitions.
+    """
+    strike = azimuth % 360.0
+    return (strike, abs(dip), rake)
+
+
+# ============================================================================
+# Variogram Model Evaluation
+# ============================================================================
+
+def evaluate_variogram(
+    model: VariogramModel,
+    distances: NDArray[np.floating],
+) -> NDArray[np.float64]:
+    """
+    Evaluate variogram model at given distances.
+
+    This computes the theoretical variogram (gamma) values for an isotropic
+    evaluation along the major axis. For anisotropic models, use the major
+    range for distance scaling.
+
+    Args:
+        model: Variogram model specification
+        distances: Array of lag distances to evaluate
+
+    Returns:
+        Array of gamma values at each distance
+    """
+    distances = np.asarray(distances, dtype=np.float64)
+    gamma = np.full_like(distances, model.nugget)
+
+    for structure in model.structures:
+        vtype = int(structure["type"])
+        sill = structure["sill"]
+        # Use major range (first element) for isotropic evaluation
+        a = structure["ranges"][0]
+
+        if a <= 0:
+            continue
+
+        h = distances / a  # Normalized distance
+
+        if vtype == VariogramType.SPHERICAL:
+            # γ(h) = c * (1.5*h - 0.5*h³) for h < 1, else c
+            contrib = np.where(
+                h < 1.0,
+                sill * (1.5 * h - 0.5 * h**3),
+                sill
+            )
+        elif vtype == VariogramType.EXPONENTIAL:
+            # γ(h) = c * (1 - exp(-3h))
+            contrib = sill * (1.0 - np.exp(-3.0 * h))
+        elif vtype == VariogramType.GAUSSIAN:
+            # γ(h) = c * (1 - exp(-3h²))
+            contrib = sill * (1.0 - np.exp(-3.0 * h**2))
+        elif vtype == VariogramType.POWER:
+            # γ(h) = c * h^ω where ω is stored in sill (typically 0 < ω < 2)
+            # Note: Power model is unbounded, sill represents coefficient
+            contrib = sill * h
+        elif vtype == VariogramType.HOLE_EFFECT:
+            # γ(h) = c * (1 - cos(π*h))
+            contrib = sill * (1.0 - np.cos(np.pi * h))
+        else:
+            # Unknown type, skip
+            contrib = 0.0
+
+        gamma = gamma + contrib
+
+    return gamma
