@@ -256,22 +256,30 @@ This requires deeper Fortran investigation to fix.
 
 ---
 
-## Phase 4: Additional Features
+## Phase 4: Python Utilities
 
-### 4.1 Variogram Fitting (Python-side)
-- Automatic model fitting from experimental variogram
-- Interactive fitting with matplotlib
-- Export to GSLIB par file format
+Pure Python utilities for common geostatistics workflows.
 
-### 4.2 Drillhole Utilities (Python-side)
-- Minimum curvature desurvey
-- Length-weighted compositing
-- Domain-aware interval merging
+### 4.1 Variogram Plotting & Export ✅ Complete
+- `plot_experimental()` - Plot experimental variogram points
+- `plot_model()` - Plot variogram model curves
+- `plot_variogram()` - Combined experimental + model overlay
+- `export_variogram_par()` - Export model to GSLIB par file format
+- `evaluate_variogram()` - Evaluate all 5 GSLIB model types
 
-### 4.3 Visualization Helpers
-- Quick 3D grid visualization (pyvista integration)
-- Variogram plotting
-- Cross-validation plots
+### 4.2 Drillhole Utilities ✅ Complete
+- `desurvey()` - Minimum curvature desurvey algorithm
+- `composite()` - Length-weighted compositing with domain breaks
+- `merge_intervals()` - Interval table intersection (FROM/TO merging)
+- Supports both dict-of-arrays and pandas DataFrame
+
+### 4.3 Rotation Convention Conversions ✅ Complete
+- Dip Direction / Dip / Rake ↔ Deutsch (GSLIB)
+- Datamine ↔ Deutsch
+- Vulcan (Strike/Dip) ↔ Deutsch
+- Leapfrog ↔ Deutsch (existing)
+- Math convention ↔ Deutsch (existing)
+- `rotation_matrix_deutsch()` - Generate 3x3 rotation matrix
 
 ---
 
@@ -282,7 +290,8 @@ This requires deeper Fortran investigation to fix.
 | v0.1    | Initial release - ASCII I/O, all 8 programs | ✅ Complete |
 | v0.2    | Binary I/O for all programs | ✅ Complete |
 | v0.3    | Grid mask support | ✅ Complete |
-| v0.4    | Double precision builds | 🔄 Partial (sgsim needs fix) |
+| v0.4    | Double precision builds | 🔄 Partial (sgsim_f64 crashes) |
+| v0.5    | Python utilities (plotting, drillhole, rotations) | ✅ Complete |
 | v1.0    | Stable API, full documentation | ⬜ Planned |
 
 ---
