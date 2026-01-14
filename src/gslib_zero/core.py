@@ -51,30 +51,38 @@ def get_bin_dir() -> Path:
     return repo_root / "bin"
 
 
-def get_executable(name: str) -> Path:
+def get_executable(name: str, precision: str = "f32") -> Path:
     """
     Get the path to a GSLIB executable.
 
     Args:
         name: Name of the executable (e.g., 'kt3d', 'sgsim')
+        precision: 'f32' for single precision (default), 'f64' for double precision
 
     Returns:
         Path to the executable
 
     Raises:
         FileNotFoundError: If executable doesn't exist
+        ValueError: If precision is invalid
     """
+    if precision not in ("f32", "f64"):
+        raise ValueError(f"precision must be 'f32' or 'f64', got '{precision}'")
+
     bin_dir = get_bin_dir()
+
+    # For f64, use program_f64 suffix
+    exe_name = f"{name}_f64" if precision == "f64" else name
 
     # Handle Windows .exe extension
     if os.name == "nt":
-        exe_path = bin_dir / f"{name}.exe"
+        exe_path = bin_dir / f"{exe_name}.exe"
     else:
-        exe_path = bin_dir / name
+        exe_path = bin_dir / exe_name
 
     if not exe_path.exists():
         raise FileNotFoundError(
-            f"GSLIB executable '{name}' not found at {exe_path}. "
+            f"GSLIB executable '{exe_name}' not found at {exe_path}. "
             f"Set GSLIB_BIN_DIR environment variable or run: "
             f"python -m gslib_zero.download_binaries"
         )
@@ -206,6 +214,7 @@ def run_gslib(
     par_file: Path | str,
     capture_output: bool = True,
     timeout: float | None = None,
+    precision: str = "f32",
 ) -> subprocess.CompletedProcess:
     """
     Run a GSLIB executable with the given parameter file.
@@ -215,6 +224,7 @@ def run_gslib(
         par_file: Path to the parameter file
         capture_output: If True, capture stdout/stderr
         timeout: Timeout in seconds (None for no timeout)
+        precision: 'f32' for single precision, 'f64' for double precision
 
     Returns:
         CompletedProcess with return code and captured output
@@ -224,7 +234,7 @@ def run_gslib(
         subprocess.TimeoutExpired: If timeout exceeded
         subprocess.CalledProcessError: If program returns non-zero exit code
     """
-    exe_path = get_executable(program)
+    exe_path = get_executable(program, precision=precision)
     par_file = Path(par_file)
 
     if not par_file.exists():

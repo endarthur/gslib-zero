@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
@@ -49,6 +49,7 @@ def sgsim(
     search_angles: tuple[float, float, float] = (0.0, 0.0, 0.0),
     binary: bool = False,
     mask: NDArray[np.integer] | None = None,
+    precision: Literal["f32", "f64"] = "f32",
 ) -> SimulationResult:
     """
     Sequential Gaussian simulation using sgsim.
@@ -74,6 +75,8 @@ def sgsim(
         binary: If True, use binary I/O (faster for large grids)
         mask: Grid mask array (0=skip, 1=simulate). Shape must match grid (nz, ny, nx).
               Masked cells output UNEST (-999).
+        precision: 'f32' for single precision (default), 'f64' for double precision.
+                   Requires corresponding binaries (sgsim vs sgsim_f64).
 
     Returns:
         SimulationResult with realizations array
@@ -201,21 +204,23 @@ def sgsim(
         par.write(par_file)
 
         # Run sgsim
-        run_gslib("sgsim", par_file)
+        run_gslib("sgsim", par_file, precision=precision)
 
         # Read results
+        # f64 binaries output double precision, f32 outputs single precision
+        output_dtype = np.float64 if precision == "f64" else np.float32
+
         if binary:
             # Binary output: header is [ndim=4, nsim, nz, ny, nx]
             # Data is sequential: all cells for sim1, then sim2, etc.
             # Within each sim, cells are in Fortran order (x fastest)
-            # GSLIB uses single precision (float32)
             with open(output_file, "rb") as f:
                 # Read header
                 ndim = np.fromfile(f, dtype=np.int32, count=1)[0]
                 shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
                 nreal_actual = shape[0]  # First dim is nsim
                 # Read flat data
-                values_flat = np.fromfile(f, dtype=np.float32)
+                values_flat = np.fromfile(f, dtype=output_dtype)
 
             ncells = grid.nx * grid.ny * grid.nz
             result = np.zeros((nreal_actual, grid.nz, grid.ny, grid.nx), dtype=np.float64)
@@ -267,6 +272,7 @@ def sisim(
     kriging_type: str = "simple",
     binary: bool = False,
     mask: NDArray[np.integer] | None = None,
+    precision: Literal["f32", "f64"] = "f32",
 ) -> SimulationResult:
     """
     Sequential indicator simulation using sisim.
@@ -290,6 +296,8 @@ def sisim(
         binary: If True, use binary I/O (faster for large grids)
         mask: Grid mask array (0=skip, 1=simulate). Shape must match grid (nz, ny, nx).
               Masked cells output UNEST (-99).
+        precision: 'f32' for single precision (default), 'f64' for double precision.
+                   Requires corresponding binaries (sisim vs sisim_f64).
 
     Returns:
         SimulationResult with realizations array (simulated values)
@@ -431,21 +439,23 @@ def sisim(
         par.write(par_file)
 
         # Run sisim
-        run_gslib("sisim", par_file)
+        run_gslib("sisim", par_file, precision=precision)
 
         # Read results
+        # f64 binaries output double precision, f32 outputs single precision
+        output_dtype = np.float64 if precision == "f64" else np.float32
+
         if binary:
             # Binary output: header is [ndim=4, nsim, nz, ny, nx]
             # Data is sequential: all cells for sim1, then sim2, etc.
             # Within each sim, cells are in Fortran order (x fastest)
-            # GSLIB uses single precision (float32)
             with open(output_file, "rb") as f:
                 # Read header
                 ndim = np.fromfile(f, dtype=np.int32, count=1)[0]
                 shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
                 nreal_actual = shape[0]  # First dim is nsim
                 # Read flat data
-                values_flat = np.fromfile(f, dtype=np.float32)
+                values_flat = np.fromfile(f, dtype=output_dtype)
 
             ncells = grid.nx * grid.ny * grid.nz
             result = np.zeros((nreal_actual, grid.nz, grid.ny, grid.nx), dtype=np.float64)

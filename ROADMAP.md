@@ -204,16 +204,55 @@ bin/
 ├── kt3d_f64.exe       # Double precision (float64 internal, float64 binary output)
 ```
 
-### Implementation Options
-1. **Compile-time flag**: `-fdefault-real-8` makes all `real` become `real*8`
-2. **Separate source**: Maintain f32/f64 variants of critical subroutines
-3. **Runtime flag**: Single binary with precision parameter (more complex)
+### Current Status
+
+| Program | f64 Binary | f64 Works | Notes |
+|---------|-----------|-----------|-------|
+| kt3d    | ✅ Built  | ✅ Yes    | Passes all tests |
+| ik3d    | ✅ Built  | ✅ Yes    | Passes all tests |
+| sgsim   | ✅ Built  | ❌ No     | SIGSEGV at runtime - needs investigation |
+| sisim   | ✅ Built  | ✅ Yes    | Passes all tests |
+| gamv    | ✅ Built  | ⬜ TBD    | Not yet tested |
+| nscore  | ✅ Built  | ⬜ TBD    | Not yet tested |
+| backtr  | ✅ Built  | ⬜ TBD    | Not yet tested |
+| declus  | ✅ Built  | ⬜ TBD    | Not yet tested |
+
+### Implementation
+
+Used `-freal-4-real-8` compile flag which promotes all 4-byte reals to 8-byte.
+This is less invasive than `-fdefault-real-8` which also affects literal constants.
+
+```makefile
+FFLAGS_F64 = -O2 -std=legacy -w -freal-4-real-8
+```
+
+### Python API
+
+Wrappers (kt3d, ik3d, sgsim, sisim) now accept `precision` parameter:
+```python
+result = kt3d(
+    x, y, z, values,
+    grid=grid,
+    variogram=variogram,
+    search=search,
+    precision="f64",  # Use double precision binary
+)
+```
+
+### Known Issues
+
+**sgsim_f64 crashes with SIGSEGV** during simulation loop (around node 50).
+The `-freal-4-real-8` flag changes array sizes and memory layout, which may
+cause issues with:
+- Hardcoded array dimensions in sgsim
+- Covariance lookup table calculations
+- Memory allocation that doesn't account for doubled data size
+
+This requires deeper Fortran investigation to fix.
 
 ### Naming Convention
 - Standard builds: `program.exe` / `program`
 - Float64 builds: `program_f64.exe` / `program_f64`
-
-Python wrapper detects available binaries and exposes `precision='f32'|'f64'` parameter.
 
 ---
 
@@ -243,7 +282,7 @@ Python wrapper detects available binaries and exposes `precision='f32'|'f64'` pa
 | v0.1    | Initial release - ASCII I/O, all 8 programs | ✅ Complete |
 | v0.2    | Binary I/O for all programs | ✅ Complete |
 | v0.3    | Grid mask support | ✅ Complete |
-| v0.4    | Double precision builds | ⬜ Planned |
+| v0.4    | Double precision builds | 🔄 Partial (sgsim needs fix) |
 | v1.0    | Stable API, full documentation | ⬜ Planned |
 
 ---

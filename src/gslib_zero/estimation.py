@@ -60,6 +60,7 @@ def kt3d(
     block_discretization: tuple[int, int, int] = (1, 1, 1),
     binary: bool = False,
     mask: NDArray[np.integer] | None = None,
+    precision: Literal["f32", "f64"] = "f32",
 ) -> KrigingResult:
     """
     3D kriging estimation using kt3d.
@@ -78,6 +79,8 @@ def kt3d(
         binary: If True, use binary I/O (requires gslib-zero modified binaries)
         mask: Optional grid mask (same shape as output grid). 0=skip, 1=estimate.
               Masked cells will have UNEST (-999) in output.
+        precision: 'f32' for single precision (default), 'f64' for double precision.
+                   Requires corresponding binaries (kt3d vs kt3d_f64).
 
     Returns:
         KrigingResult with estimate, variance, and grid spec
@@ -179,13 +182,14 @@ def kt3d(
         par.write(par_file)
 
         # Run kt3d
-        run_gslib("kt3d", par_file)
+        run_gslib("kt3d", par_file, precision=precision)
 
         # Read results
+        # f64 binaries output double precision, f32 outputs single precision
+        output_dtype = np.float64 if precision == "f64" else np.float32
         if binary:
             # Binary output: 4D array (nvars=2, nz, ny, nx) with (est, var) interleaved
-            # GSLIB uses single precision (float32) for estimates
-            output_data = BinaryIO.read_array(output_file, dtype=np.float32)
+            output_data = BinaryIO.read_array(output_file, dtype=output_dtype)
             # Shape is (2, nz, ny, nx) - first dim is variable (0=est, 1=var)
             estimate = output_data[0].astype(np.float64)  # Convert to float64
             variance = output_data[1].astype(np.float64)
@@ -251,6 +255,7 @@ def ik3d(
     tmax: float = 1.0e21,
     binary: bool = False,
     mask: NDArray[np.integer] | None = None,
+    precision: Literal["f32", "f64"] = "f32",
 ) -> IndicatorKrigingResult:
     """
     Indicator kriging using ik3d.
@@ -271,6 +276,8 @@ def ik3d(
         binary: If True, use binary I/O (requires gslib-zero modified binaries)
         mask: Optional grid mask (same shape as output grid). 0=skip, 1=estimate.
               Masked cells will have UNEST (-999) in output.
+        precision: 'f32' for single precision (default), 'f64' for double precision.
+                   Requires corresponding binaries (ik3d vs ik3d_f64).
 
     Returns:
         IndicatorKrigingResult with probabilities array of shape (ncut, nz, ny, nx)
@@ -375,16 +382,19 @@ def ik3d(
         par.write(par_file)
 
         # Run ik3d
-        run_gslib("ik3d", par_file)
+        run_gslib("ik3d", par_file, precision=precision)
 
         # Read results
+        # f64 binaries output double precision, f32 outputs single precision
+        output_dtype = np.float64 if precision == "f64" else np.float32
+
         if binary:
             # Binary output: 4D array (ncut, nz, ny, nx)
             with open(output_file, "rb") as f:
                 ndim = np.fromfile(f, dtype=np.int32, count=1)[0]
                 shape = tuple(np.fromfile(f, dtype=np.int32, count=ndim))
                 ncut_actual = shape[0]
-                values_flat = np.fromfile(f, dtype=np.float32)
+                values_flat = np.fromfile(f, dtype=output_dtype)
 
             # Reshape with F-order to match other GSLIB programs (kt3d, sgsim, etc.)
             # Data is ncut values per cell, so reshape to (ncut, nz, ny, nx)

@@ -20,6 +20,7 @@ endif
 
 FC = gfortran
 FFLAGS = -O2 -std=legacy -w
+FFLAGS_F64 = -O2 -std=legacy -w -freal-4-real-8
 FFLAGS_F90 = -O2
 
 # Directories
@@ -38,12 +39,26 @@ PROGRAMS = nscore backtr declus gamv kt3d ik3d sgsim sisim
 BINARY_IO_MOD = $(SRCDIR)/gslib_binary_io.f90
 BINARY_IO_OBJ = $(SRCDIR)/gslib_binary_io.o
 
-.PHONY: all clean binary original $(PROGRAMS)
+.PHONY: all clean binary original f64 $(PROGRAMS)
 
 # Default: build original ASCII versions
 all: original
 
 original: $(PROGRAMS)
+
+# Double precision (float64) builds
+PROGRAMS_F64 = $(addsuffix _f64,$(PROGRAMS))
+f64: $(PROGRAMS_F64)
+
+# F64 program targets
+nscore_f64: $(BINDIR)/nscore_f64$(EXE)
+backtr_f64: $(BINDIR)/backtr_f64$(EXE)
+declus_f64: $(BINDIR)/declus_f64$(EXE)
+gamv_f64: $(BINDIR)/gamv_f64$(EXE)
+kt3d_f64: $(BINDIR)/kt3d_f64$(EXE)
+ik3d_f64: $(BINDIR)/ik3d_f64$(EXE)
+sgsim_f64: $(BINDIR)/sgsim_f64$(EXE)
+sisim_f64: $(BINDIR)/sisim_f64$(EXE)
 
 # Build individual programs
 nscore: $(BINDIR)/nscore$(EXE)
@@ -96,6 +111,31 @@ $(BINDIR)/sgsim$(EXE): $(SRCDIR)/sgsim.o $(GSLIB_OBJS) | $(BINDIR)
 $(BINDIR)/sisim$(EXE): $(SRCDIR)/sisim.o $(GSLIB_OBJS) | $(BINDIR)
 	$(FC) $(FFLAGS) $(LDFLAGS) -o $@ $^
 
+# F64 builds - compile and link in one step to avoid object file conflicts
+$(BINDIR)/nscore_f64$(EXE): $(SRCDIR)/nscore.for $(GSLIB_SRCS) | $(BINDIR)
+	$(FC) $(FFLAGS_F64) $(LDFLAGS) -o $@ $^
+
+$(BINDIR)/backtr_f64$(EXE): $(SRCDIR)/backtr.for $(GSLIB_SRCS) | $(BINDIR)
+	$(FC) $(FFLAGS_F64) $(LDFLAGS) -o $@ $^
+
+$(BINDIR)/declus_f64$(EXE): $(SRCDIR)/declus.for $(GSLIB_SRCS) | $(BINDIR)
+	$(FC) $(FFLAGS_F64) $(LDFLAGS) -o $@ $^
+
+$(BINDIR)/gamv_f64$(EXE): $(SRCDIR)/gamv.for $(GSLIB_SRCS) | $(BINDIR)
+	$(FC) $(FFLAGS_F64) $(LDFLAGS) -o $@ $^
+
+$(BINDIR)/kt3d_f64$(EXE): $(SRCDIR)/kt3d.for $(GSLIB_SRCS) | $(BINDIR)
+	$(FC) $(FFLAGS_F64) $(LDFLAGS) -o $@ $^
+
+$(BINDIR)/ik3d_f64$(EXE): $(SRCDIR)/ik3d.for $(GSLIB_SRCS) | $(BINDIR)
+	$(FC) $(FFLAGS_F64) $(LDFLAGS) -o $@ $^
+
+$(BINDIR)/sgsim_f64$(EXE): $(SRCDIR)/sgsim.for $(GSLIB_SRCS) | $(BINDIR)
+	$(FC) $(FFLAGS_F64) $(LDFLAGS) -o $@ $^
+
+$(BINDIR)/sisim_f64$(EXE): $(SRCDIR)/sisim.for $(GSLIB_SRCS) | $(BINDIR)
+	$(FC) $(FFLAGS_F64) $(LDFLAGS) -o $@ $^
+
 # Clean build artifacts
 clean:
 	rm -f $(SRCDIR)/*.o $(SRCDIR)/*.mod $(GSLIBDIR)/*.o
@@ -103,3 +143,7 @@ clean:
 	rm -f $(BINDIR)/declus$(EXE) $(BINDIR)/gamv$(EXE)
 	rm -f $(BINDIR)/kt3d$(EXE) $(BINDIR)/ik3d$(EXE)
 	rm -f $(BINDIR)/sgsim$(EXE) $(BINDIR)/sisim$(EXE)
+	rm -f $(BINDIR)/nscore_f64$(EXE) $(BINDIR)/backtr_f64$(EXE)
+	rm -f $(BINDIR)/declus_f64$(EXE) $(BINDIR)/gamv_f64$(EXE)
+	rm -f $(BINDIR)/kt3d_f64$(EXE) $(BINDIR)/ik3d_f64$(EXE)
+	rm -f $(BINDIR)/sgsim_f64$(EXE) $(BINDIR)/sisim_f64$(EXE)
