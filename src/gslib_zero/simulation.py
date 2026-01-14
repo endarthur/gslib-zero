@@ -13,7 +13,9 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
-from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib
+import warnings
+
+from gslib_zero.core import AsciiIO, BinaryIO, ExperimentalWarning, GSLIBWorkspace, run_gslib
 from gslib_zero.par import ParFileBuilder
 from gslib_zero.utils import GridSpec, VariogramModel
 
@@ -80,7 +82,19 @@ def sgsim(
 
     Returns:
         SimulationResult with realizations array
+
+    Raises:
+        NotImplementedError: If precision='f64' is requested. The sgsim_f64 binary
+            currently crashes due to memory layout issues. Use precision='f32' instead.
     """
+    # Block f64 for sgsim - known crash issue
+    if precision == "f64":
+        raise NotImplementedError(
+            "sgsim with precision='f64' is not yet supported (known crash issue). "
+            "Use precision='f32' (default) instead. "
+            "See https://github.com/arthurendo/gslib-zero for updates."
+        )
+
     # Handle unconditional case
     if x is None or values is None:
         n = 0
@@ -301,7 +315,19 @@ def sisim(
 
     Returns:
         SimulationResult with realizations array (simulated values)
+
+    Note:
+        The f64 precision option is experimental. The f64 builds are provided
+        as a preview and may be promoted to stable in a future release.
     """
+    # Warn about experimental f64
+    if precision == "f64":
+        warnings.warn(
+            "sisim with precision='f64' is experimental. Results should be validated.",
+            ExperimentalWarning,
+            stacklevel=2,
+        )
+
     ncut = len(thresholds)
     if len(variograms) != ncut:
         raise ValueError(f"Need {ncut} variograms for {ncut} thresholds")

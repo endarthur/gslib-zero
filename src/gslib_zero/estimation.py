@@ -13,7 +13,9 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
-from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib
+import warnings
+
+from gslib_zero.core import AsciiIO, BinaryIO, ExperimentalWarning, GSLIBWorkspace, run_gslib
 from gslib_zero.par import ParFileBuilder
 from gslib_zero.utils import GridSpec, VariogramModel
 
@@ -84,7 +86,19 @@ def kt3d(
 
     Returns:
         KrigingResult with estimate, variance, and grid spec
+
+    Note:
+        The f64 precision option is experimental. The f64 builds are provided
+        as a preview and may be promoted to stable in a future release.
     """
+    # Warn about experimental f64
+    if precision == "f64":
+        warnings.warn(
+            "kt3d with precision='f64' is experimental. Results should be validated.",
+            ExperimentalWarning,
+            stacklevel=2,
+        )
+
     # Validate inputs
     x = np.asarray(x, dtype=np.float64).ravel()
     y = np.asarray(y, dtype=np.float64).ravel()
@@ -281,7 +295,19 @@ def ik3d(
 
     Returns:
         IndicatorKrigingResult with probabilities array of shape (ncut, nz, ny, nx)
+
+    Note:
+        The f64 precision option is experimental. The f64 builds are provided
+        as a preview and may be promoted to stable in a future release.
     """
+    # Warn about experimental f64
+    if precision == "f64":
+        warnings.warn(
+            "ik3d with precision='f64' is experimental. Results should be validated.",
+            ExperimentalWarning,
+            stacklevel=2,
+        )
+
     x = np.asarray(x, dtype=np.float64).ravel()
     y = np.asarray(y, dtype=np.float64).ravel()
     z = np.asarray(z, dtype=np.float64).ravel()

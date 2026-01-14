@@ -21,6 +21,21 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
+class ExperimentalWarning(UserWarning):
+    """Warning for experimental or preview features.
+
+    This warning is emitted when using features that are functional but
+    not yet considered stable. Users should validate results carefully
+    when using experimental features.
+
+    Examples:
+        - Double precision (f64) builds are experimental
+        - New algorithms under development
+    """
+
+    pass
+
+
 def get_bin_dir() -> Path:
     """Get the directory containing GSLIB executables."""
     # First check for environment variable override

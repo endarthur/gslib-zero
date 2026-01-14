@@ -4,17 +4,17 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gslib-zero"
-version = "0.1.0"
+version = "1.0.0"
 description = "Python wrapper for Stanford's GSLIB Fortran 90 geostatistics programs with binary I/O"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
 authors = [
-    { name = "Arthur" }
+    { name = "Arthur Endlein", email = "endarthur@gmail.com" }
 ]
-keywords = ["geostatistics", "kriging", "variogram", "simulation", "GSLIB"]
+keywords = ["geostatistics", "kriging", "variogram", "simulation", "GSLIB", "mining", "geology"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
     "numpy>=1.20",
@@ -37,9 +38,14 @@ dev = [
 drillhole = [
     "pandas>=1.4",
 ]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=2.0",
+]
 
 [project.urls]
-Repository = "https://github.com/arthurendo/gslib-zero"
+Repository = "https://github.com/endarthur/gslib-zero"
+Documentation = "https://gslib-zero.readthedocs.io"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gslib_zero"]
