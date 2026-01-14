@@ -173,6 +173,16 @@ python -m gslib_zero.download_binaries
 - `ROADMAP.md` — Project roadmap and version milestones
 - `docs/binary-io-implementation.md` — How to implement binary I/O in GSLIB programs
 
+## Example Notebooks
+
+The `examples/` directory contains Jupyter notebooks demonstrating gslib-zero usage:
+
+- `01_quickstart_kriging.ipynb` — Complete kriging workflow
+- `02_variogram_analysis.ipynb` — Directional variograms and model fitting
+- `03_drillhole_workflow.ipynb` — Desurvey, composite, merge, and estimate
+
+**Maintenance**: When modifying the library's public API, update these notebooks to reflect the changes. The notebooks serve as both documentation and integration tests.
+
 ## Questions to Ask Arthur
 
 If you're unsure about something:

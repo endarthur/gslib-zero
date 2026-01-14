@@ -36,6 +36,17 @@ Features
 - Re-estimate only updated domains without full grid computation
 - Significant performance improvement for sparse domains
 
+**Flexible Input API**
+
+All GSLIB wrappers accept flexible input formats:
+
+- Pass pandas Series directly: ``kt3d(df.x, df.y, df.z, df.grade, ...)``
+- Use DataFrame with column names: ``kt3d(data=df, value_col='grade', ...)``
+- NumPy arrays and lists work without conversion
+
+No ``.values`` needed when working with pandas—gslib-zero handles the conversion
+automatically.
+
 **Python Utilities**
 
 - Variogram plotting: :func:`~gslib_zero.plot_experimental`, :func:`~gslib_zero.plot_model`,
@@ -45,6 +56,12 @@ Features
 - Compositing: :func:`~gslib_zero.composite` (length-weighted with domain breaks)
 - Interval merging: :func:`~gslib_zero.merge_intervals`
 - Rotation conversions for Leapfrog, Datamine, Vulcan, and dip direction/dip conventions
+
+**Example Notebooks**
+
+- ``01_quickstart_kriging.ipynb`` - Complete kriging workflow
+- ``02_variogram_analysis.ipynb`` - Directional variograms and model fitting
+- ``03_drillhole_workflow.ipynb`` - Desurvey, composite, merge, and estimate
 
 **Double Precision (Experimental)**
 
