@@ -34,14 +34,17 @@ Example: Simple vs Ordinary Kriging
 .. code-block:: python
 
     import numpy as np
+    import pandas as pd
     from gslib_zero import kt3d, GridSpec, VariogramModel, SearchParameters
 
-    # Sample data
+    # Sample data as DataFrame
     np.random.seed(42)
-    x = np.random.uniform(0, 100, 30)
-    y = np.random.uniform(0, 100, 30)
-    z = np.zeros(30)
-    values = np.random.normal(10, 2, 30)
+    df = pd.DataFrame({
+        'x': np.random.uniform(0, 100, 30),
+        'y': np.random.uniform(0, 100, 30),
+        'z': np.zeros(30),
+        'grade': np.random.normal(10, 2, 30),
+    })
 
     # Grid and model
     grid = GridSpec(nx=20, ny=20, nz=1, xmin=2.5, ymin=2.5, zmin=0,
@@ -50,17 +53,18 @@ Example: Simple vs Ordinary Kriging
     search = SearchParameters(radius1=100, radius2=100, radius3=10,
                               min_samples=4, max_samples=12)
 
-    # Ordinary kriging (estimates local mean)
-    ok_result = kt3d(x, y, z, values, grid, variogram, search,
+    # Ordinary kriging - pass Series directly
+    ok_result = kt3d(df.x, df.y, df.z, df.grade, grid, variogram, search,
                      kriging_type="ordinary", binary=True)
 
-    # Simple kriging (uses known mean)
-    sk_result = kt3d(x, y, z, values, grid, variogram, search,
-                     kriging_type="simple", sk_mean=values.mean(), binary=True)
+    # Simple kriging - using DataFrame pattern
+    sk_result = kt3d(data=df, value_col='grade', grid=grid, variogram=variogram,
+                     search=search, kriging_type="simple", sk_mean=df.grade.mean(),
+                     binary=True)
 
     print(f"OK mean: {ok_result.estimate.mean():.2f}")
     print(f"SK mean: {sk_result.estimate.mean():.2f}")
-    print(f"Data mean: {values.mean():.2f}")
+    print(f"Data mean: {df.grade.mean():.2f}")
 
 Example: Kriging with Mask
 --------------------------
@@ -71,7 +75,8 @@ Example: Kriging with Mask
     from gslib_zero import kt3d, GridSpec, VariogramModel, SearchParameters
 
     # Create mask for irregular domain
-    grid = GridSpec(nx=50, ny=50, nz=1, ...)
+    grid = GridSpec(nx=50, ny=50, nz=1, xmin=5, ymin=5, zmin=0,
+                    xsiz=10, ysiz=10, zsiz=1)
     X, Y, Z = grid.meshgrid()
 
     # Only estimate within a polygon or distance threshold
@@ -80,6 +85,6 @@ Example: Kriging with Mask
     dist = np.sqrt((X - center[0])**2 + (Y - center[1])**2)
     mask[dist < 200] = 1  # Active cells within radius
 
-    # Run kriging - inactive cells will have UNEST (-999)
-    result = kt3d(x, y, z, values, grid, variogram, search,
-                  mask=mask, binary=True)
+    # Run kriging with mask - using DataFrame pattern
+    result = kt3d(data=df, value_col='grade', grid=grid, variogram=variogram,
+                  search=search, mask=mask, binary=True)

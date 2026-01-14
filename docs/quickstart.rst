@@ -7,30 +7,34 @@ from raw data to kriged estimates with variogram analysis.
 Sample Dataset
 --------------
 
-Let's create a synthetic dataset that mimics a typical mineral deposit:
+gslib-zero works seamlessly with pandas DataFrames and Series. Let's create a
+synthetic dataset that mimics a typical mineral deposit:
 
 .. code-block:: python
 
     import numpy as np
+    import pandas as pd
 
     # Set seed for reproducibility
     np.random.seed(42)
 
-    # Generate 100 sample locations
+    # Generate 100 sample locations as a DataFrame
     n_samples = 100
-    x = np.random.uniform(0, 1000, n_samples)
-    y = np.random.uniform(0, 1000, n_samples)
-    z = np.zeros(n_samples)  # 2D example (single level)
+    df = pd.DataFrame({
+        'x': np.random.uniform(0, 1000, n_samples),
+        'y': np.random.uniform(0, 1000, n_samples),
+        'z': np.zeros(n_samples),  # 2D example (single level)
+    })
 
     # Generate spatially correlated values using a simple trend + noise
     # This simulates a grade distribution with spatial structure
-    trend = 0.005 * x + 0.003 * y
+    trend = 0.005 * df.x + 0.003 * df.y
     noise = np.random.normal(0, 1.5, n_samples)
-    values = 5.0 + trend + noise
+    df['grade'] = 5.0 + trend + noise
 
-    print(f"Samples: {n_samples}")
-    print(f"Grade range: {values.min():.2f} - {values.max():.2f}")
-    print(f"Mean: {values.mean():.2f}, Std: {values.std():.2f}")
+    print(f"Samples: {len(df)}")
+    print(f"Grade range: {df.grade.min():.2f} - {df.grade.max():.2f}")
+    print(f"Mean: {df.grade.mean():.2f}, Std: {df.grade.std():.2f}")
 
 Step 1: Exploratory Data Analysis
 ---------------------------------
@@ -44,13 +48,13 @@ Before geostatistical analysis, understand your data distribution:
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
     # Histogram
-    axes[0].hist(values, bins=20, edgecolor='black', alpha=0.7)
+    axes[0].hist(df.grade, bins=20, edgecolor='black', alpha=0.7)
     axes[0].set_xlabel('Grade')
     axes[0].set_ylabel('Frequency')
     axes[0].set_title('Grade Distribution')
 
     # Sample locations colored by value
-    scatter = axes[1].scatter(x, y, c=values, cmap='viridis', s=50)
+    scatter = axes[1].scatter(df.x, df.y, c=df.grade, cmap='viridis', s=50)
     axes[1].set_xlabel('X')
     axes[1].set_ylabel('Y')
     axes[1].set_title('Sample Locations')
@@ -68,12 +72,12 @@ Many geostatistical methods assume Gaussian distributions. Transform your data:
 
     from gslib_zero import nscore
 
-    # Transform to normal scores
-    nscore_values, transform_table = nscore(values, binary=True)
+    # Transform to normal scores - accepts Series directly
+    df['nscore'], transform_table = nscore(df.grade, binary=True)
 
-    print(f"Original mean: {values.mean():.3f}")
-    print(f"Normal score mean: {nscore_values.mean():.6f}")  # Should be ~0
-    print(f"Normal score std: {nscore_values.std():.6f}")   # Should be ~1
+    print(f"Original mean: {df.grade.mean():.3f}")
+    print(f"Normal score mean: {df.nscore.mean():.6f}")  # Should be ~0
+    print(f"Normal score std: {df.nscore.std():.6f}")   # Should be ~1
 
 Step 3: Variogram Analysis
 --------------------------
@@ -84,17 +88,16 @@ Compute experimental variograms to understand spatial correlation:
 
     from gslib_zero import gamv, plot_variogram, VariogramModel
 
-    # Compute omnidirectional variogram
-    variogram_result = gamv(
-        x, y, z, nscore_values,
+    # Compute omnidirectional variogram - pass Series directly
+    variogram_results = gamv(
+        df.x, df.y, df.z, df.nscore,
+        nlag=15,               # Number of lags
         lag_distance=50.0,     # Lag spacing
-        lag_tolerance=25.0,    # Lag tolerance
-        n_lags=15,             # Number of lags
-        azimuth=0.0,           # Direction (0 = omnidirectional when atol=90)
-        azimuth_tolerance=90.0,
         binary=True
     )
 
+    # gamv returns a list (one per direction); we computed one direction
+    variogram_result = variogram_results[0]
     print(f"Number of lags computed: {len(variogram_result.gamma)}")
     print(f"Max lag distance: {variogram_result.lag_distances.max():.0f}")
 
@@ -164,15 +167,22 @@ Run ordinary kriging to estimate values at grid nodes:
         max_samples=16,    # Maximum samples to use
     )
 
-    # Run kriging on normal scores
+    # Run kriging on normal scores - two equivalent ways:
+
+    # Option 1: Pass Series directly (no .values needed)
     result = kt3d(
-        x, y, z, nscore_values,
-        grid=grid,
-        variogram=variogram_model,
-        search=search,
+        df.x, df.y, df.z, df.nscore,
+        grid, variogram_model, search,
         kriging_type="ordinary",
         binary=True
     )
+
+    # Option 2: Pass DataFrame with column names
+    # result = kt3d(
+    #     data=df, value_col='nscore',
+    #     grid=grid, variogram=variogram_model, search=search,
+    #     kriging_type="ordinary", binary=True
+    # )
 
     print(f"Estimate shape: {result.estimate.shape}")
     print(f"Kriged mean: {result.estimate.mean():.4f}")
@@ -190,8 +200,8 @@ Transform kriged normal scores back to original units:
     estimates_original = backtr(
         result.estimate.ravel(),
         transform_table,
-        tmin=values.min() * 0.9,  # Extrapolation limits
-        tmax=values.max() * 1.1,
+        zmin=df.grade.min() * 0.9,  # Extrapolation limits
+        zmax=df.grade.max() * 1.1,
         binary=True
     )
 
@@ -199,7 +209,7 @@ Transform kriged normal scores back to original units:
     estimates_original = estimates_original.reshape(result.estimate.shape)
 
     print(f"Back-transformed mean: {estimates_original.mean():.2f}")
-    print(f"Original data mean: {values.mean():.2f}")
+    print(f"Original data mean: {df.grade.mean():.2f}")
 
 Step 8: Visualize Results
 -------------------------
@@ -217,7 +227,7 @@ Display the kriged estimates:
         origin='lower',
         cmap='viridis'
     )
-    axes[0].scatter(x, y, c='red', s=20, alpha=0.5, label='Samples')
+    axes[0].scatter(df.x, df.y, c='red', s=20, alpha=0.5, label='Samples')
     axes[0].set_xlabel('X')
     axes[0].set_ylabel('Y')
     axes[0].set_title('Kriged Estimates')
@@ -231,7 +241,7 @@ Display the kriged estimates:
         origin='lower',
         cmap='Reds'
     )
-    axes[1].scatter(x, y, c='blue', s=20, alpha=0.5, label='Samples')
+    axes[1].scatter(df.x, df.y, c='blue', s=20, alpha=0.5, label='Samples')
     axes[1].set_xlabel('X')
     axes[1].set_ylabel('Y')
     axes[1].set_title('Kriging Variance')
@@ -259,13 +269,13 @@ For large datasets, binary I/O significantly improves performance:
 
     # ASCII mode
     start = time.time()
-    result_ascii = kt3d(x, y, z, nscore_values, large_grid,
+    result_ascii = kt3d(df.x, df.y, df.z, df.nscore, large_grid,
                         variogram_model, search, binary=False)
     ascii_time = time.time() - start
 
     # Binary mode
     start = time.time()
-    result_binary = kt3d(x, y, z, nscore_values, large_grid,
+    result_binary = kt3d(df.x, df.y, df.z, df.nscore, large_grid,
                          variogram_model, search, binary=True)
     binary_time = time.time() - start
 
@@ -288,9 +298,9 @@ Skip inactive cells to save computation time:
 
     print(f"Active cells: {mask.sum()} / {grid.ncells}")
 
-    # Run kriging with mask
+    # Run kriging with mask - using DataFrame pattern
     result_masked = kt3d(
-        x, y, z, nscore_values,
+        data=df, value_col='nscore',
         grid=grid,
         variogram=variogram_model,
         search=search,

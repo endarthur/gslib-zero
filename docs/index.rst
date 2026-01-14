@@ -70,16 +70,21 @@ Additionally, gslib-zero includes Python utilities for:
 Quick Example
 -------------
 
+gslib-zero works seamlessly with pandas DataFrames and numpy arrays:
+
 .. code-block:: python
 
     import numpy as np
+    import pandas as pd
     from gslib_zero import kt3d, GridSpec, VariogramModel, SearchParameters
 
-    # Sample data
-    x = np.random.uniform(0, 100, 50)
-    y = np.random.uniform(0, 100, 50)
-    z = np.zeros(50)
-    values = np.random.normal(10, 2, 50)
+    # Sample data as DataFrame
+    df = pd.DataFrame({
+        'x': np.random.uniform(0, 100, 50),
+        'y': np.random.uniform(0, 100, 50),
+        'z': np.zeros(50),
+        'grade': np.random.normal(10, 2, 50),
+    })
 
     # Define estimation grid
     grid = GridSpec(
@@ -101,8 +106,12 @@ Quick Example
         min_samples=4, max_samples=16
     )
 
-    # Run ordinary kriging with binary I/O
-    result = kt3d(x, y, z, values, grid, variogram, search, binary=True)
+    # Run kriging - pass Series directly (no .values needed)
+    result = kt3d(df.x, df.y, df.z, df.grade, grid, variogram, search, binary=True)
+
+    # Or use DataFrame with column names
+    # result = kt3d(data=df, value_col='grade', grid=grid, variogram=variogram,
+    #               search=search, binary=True)
 
     print(f"Estimate shape: {result.estimate.shape}")
     print(f"Mean estimate: {result.estimate.mean():.2f}")
