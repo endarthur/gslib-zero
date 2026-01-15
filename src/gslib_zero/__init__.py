@@ -79,7 +79,7 @@ from gslib_zero.utils import (
 
 # GSLIB program wrappers
 from gslib_zero.transforms import nscore, backtr
-from gslib_zero.variogram import gamv, VariogramResult
+from gslib_zero.variogram import gamv, VariogramResult, GamvDirection
 from gslib_zero.estimation import (
     kt3d,
     ik3d,
@@ -131,6 +131,7 @@ __all__ = [
     "sisim",
     # Result classes
     "VariogramResult",
+    "GamvDirection",
     "KrigingResult",
     "IndicatorKrigingResult",
     "SimulationResult",
