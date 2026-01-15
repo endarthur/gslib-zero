@@ -12,6 +12,10 @@ from gslib_zero.utils import (
     deutsch_to_math,
     math_to_deutsch,
     rotation_matrix_deutsch,
+    UNEST,
+    UNEST_IK,
+    is_unestimated,
+    mask_unestimated,
 )
 
 
@@ -139,3 +143,97 @@ class TestRotationConversions:
 
         # R @ R.T should be identity
         np.testing.assert_array_almost_equal(R @ R.T, np.eye(3), decimal=10)
+
+
+class TestUnestimatedUtilities:
+    """Tests for UNEST sentinel value utilities."""
+
+    def test_unest_constants(self):
+        """Test UNEST constant values."""
+        assert UNEST == pytest.approx(-999.0)
+        assert UNEST_IK == pytest.approx(-9.9999)
+
+    def test_is_unestimated_continuous(self):
+        """Test detection of continuous UNEST values."""
+        values = np.array([1.0, 2.0, -999.0, 3.0, -999.0])
+        mask = is_unestimated(values)
+
+        assert mask.shape == values.shape
+        assert mask[0] is np.False_
+        assert mask[1] is np.False_
+        assert mask[2] is np.True_
+        assert mask[3] is np.False_
+        assert mask[4] is np.True_
+
+    def test_is_unestimated_indicator(self):
+        """Test detection of indicator UNEST_IK values."""
+        values = np.array([0.25, 0.50, -9.9999, 0.75])
+        mask = is_unestimated(values)
+
+        assert mask[0] is np.False_
+        assert mask[1] is np.False_
+        assert mask[2] is np.True_
+        assert mask[3] is np.False_
+
+    def test_is_unestimated_mixed(self):
+        """Test detection with both UNEST and UNEST_IK values."""
+        values = np.array([1.0, -999.0, -9.9999, 2.0])
+        mask = is_unestimated(values)
+
+        assert np.sum(mask) == 2  # Two unestimated values
+        assert mask[1] is np.True_
+        assert mask[2] is np.True_
+
+    def test_is_unestimated_3d_array(self):
+        """Test with 3D grid array."""
+        values = np.ones((2, 3, 4))
+        values[0, 1, 2] = UNEST
+        values[1, 0, 0] = UNEST_IK
+
+        mask = is_unestimated(values)
+
+        assert mask.shape == values.shape
+        assert mask[0, 1, 2] is np.True_
+        assert mask[1, 0, 0] is np.True_
+        assert np.sum(mask) == 2
+
+    def test_mask_unestimated_basic(self):
+        """Test masked array creation."""
+        values = np.array([1.0, 2.0, -999.0, 3.0])
+        masked = mask_unestimated(values)
+
+        assert isinstance(masked, np.ma.MaskedArray)
+        assert masked.mask[2] is np.True_
+        assert masked.count() == 3  # 3 valid values
+
+    def test_mask_unestimated_mean(self):
+        """Test that masked array excludes UNEST from statistics."""
+        values = np.array([2.0, 4.0, -999.0, 6.0])
+        masked = mask_unestimated(values)
+
+        # Mean should be (2 + 4 + 6) / 3 = 4.0, ignoring -999
+        assert masked.mean() == pytest.approx(4.0)
+
+    def test_mask_unestimated_3d(self):
+        """Test masked array with 3D data."""
+        values = np.ones((2, 3, 4)) * 10.0
+        values[0, 0, 0] = UNEST
+        values[1, 2, 3] = UNEST
+
+        masked = mask_unestimated(values)
+
+        assert masked.count() == 22  # 24 - 2 = 22 valid cells
+        assert masked.mean() == pytest.approx(10.0)
+
+    def test_is_unestimated_tolerance(self):
+        """Test tolerance parameter."""
+        # Value slightly different from UNEST
+        values = np.array([-998.995, -999.005])
+
+        # Default tolerance (0.01) should catch both
+        mask = is_unestimated(values, tol=0.01)
+        assert np.all(mask)
+
+        # Tighter tolerance should miss them
+        mask_tight = is_unestimated(values, tol=0.001)
+        assert not np.any(mask_tight)

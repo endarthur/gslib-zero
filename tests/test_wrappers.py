@@ -10,7 +10,7 @@ from gslib_zero.declustering import declus
 from gslib_zero.variogram import gamv, GamvDirection
 from gslib_zero.estimation import kt3d, SearchParameters
 from gslib_zero.simulation import sgsim
-from gslib_zero.utils import GridSpec, VariogramModel
+from gslib_zero.utils import GridSpec, VariogramModel, is_unestimated, mask_unestimated
 
 
 class TestNscoreBacktr:
@@ -1230,6 +1230,291 @@ class TestDoublePrecision:
 
         # Check output shape
         assert result.realizations.shape == (1, simple_grid.nz, simple_grid.ny, simple_grid.nx)
+
+
+class TestDataFrameInputPatterns:
+    """Test DataFrame/Series input patterns across all wrappers."""
+
+    def test_kt3d_series_input(self, sample_data, simple_grid):
+        """Test kt3d accepts pandas Series directly."""
+        pd = pytest.importorskip("pandas")
+
+        df = pd.DataFrame(sample_data)
+        variogram = VariogramModel.spherical(sill=4.0, ranges=(50.0, 50.0, 10.0), nugget=0.5)
+        search = SearchParameters(radius1=50.0, radius2=50.0, radius3=10.0)
+
+        # Pass Series directly (no .values needed) - use bracket notation for "values" column
+        result = kt3d(df["x"], df["y"], df["z"], df["values"], simple_grid, variogram, search, binary=True)
+
+        assert result.estimate.shape == simple_grid.shape
+
+    def test_kt3d_dataframe_input(self, sample_data, simple_grid):
+        """Test kt3d accepts DataFrame with column names."""
+        pd = pytest.importorskip("pandas")
+
+        df = pd.DataFrame(sample_data)
+        variogram = VariogramModel.spherical(sill=4.0, ranges=(50.0, 50.0, 10.0), nugget=0.5)
+        search = SearchParameters(radius1=50.0, radius2=50.0, radius3=10.0)
+
+        # Use data= pattern
+        result = kt3d(
+            data=df, value_col="values",
+            grid=simple_grid, variogram=variogram, search=search,
+            binary=True
+        )
+
+        assert result.estimate.shape == simple_grid.shape
+
+    def test_nscore_series_input(self, sample_data):
+        """Test nscore accepts pandas Series directly."""
+        pd = pytest.importorskip("pandas")
+
+        df = pd.DataFrame(sample_data)
+
+        # Pass Series directly - use bracket notation
+        transformed, table = nscore(df["values"], binary=True)
+
+        assert len(transformed) == len(df)
+        assert table.shape[1] == 2
+
+    def test_nscore_dataframe_input(self, sample_data):
+        """Test nscore accepts DataFrame with column names."""
+        pd = pytest.importorskip("pandas")
+
+        df = pd.DataFrame(sample_data)
+
+        # Use data= pattern
+        transformed, table = nscore(data=df, value_col="values", binary=True)
+
+        assert len(transformed) == len(df)
+
+    def test_backtr_series_input(self, sample_data):
+        """Test backtr accepts pandas Series directly."""
+        pd = pytest.importorskip("pandas")
+
+        df = pd.DataFrame(sample_data)
+        transformed, table = nscore(df["values"], binary=True)
+
+        # Put transformed values in a Series
+        df["nscore"] = transformed
+
+        # Pass Series directly
+        recovered = backtr(df["nscore"], table, binary=True)
+
+        assert len(recovered) == len(df)
+
+    def test_gamv_series_input(self, sample_data):
+        """Test gamv accepts pandas Series directly."""
+        pd = pytest.importorskip("pandas")
+
+        df = pd.DataFrame(sample_data)
+
+        # Use bracket notation for all columns
+        results = gamv(df["x"], df["y"], df["z"], df["values"], nlag=10, lag_distance=10.0, binary=True)
+
+        assert len(results) == 1
+        assert len(results[0].gamma) == 10
+
+    def test_gamv_dataframe_input(self, sample_data):
+        """Test gamv accepts DataFrame with column names."""
+        pd = pytest.importorskip("pandas")
+
+        df = pd.DataFrame(sample_data)
+
+        results = gamv(data=df, value_col="values", nlag=10, lag_distance=10.0, binary=True)
+
+        assert len(results) == 1
+
+    def test_declus_series_input(self, sample_data):
+        """Test declus accepts pandas Series directly."""
+        pd = pytest.importorskip("pandas")
+
+        df = pd.DataFrame(sample_data)
+
+        # Use bracket notation for all columns, provide required cell_min/cell_max
+        result = declus(
+            df["x"], df["y"], df["z"], df["values"],
+            cell_min=5.0, cell_max=50.0, n_cells=5,
+            binary=True
+        )
+
+        assert len(result.weights) == len(df)
+
+    def test_sgsim_unconditional(self, simple_grid):
+        """Test sgsim unconditional simulation (no conditioning data)."""
+        variogram = VariogramModel.spherical(sill=1.0, ranges=(5.0, 5.0, 2.0), nugget=0.1)
+
+        # Unconditional simulation - no data parameter
+        result = sgsim(
+            grid=simple_grid,
+            variogram=variogram,
+            search_radius=(10.0, 10.0, 5.0),
+            nrealizations=1,
+            seed=42,
+            binary=True
+        )
+
+        assert result.realizations.shape == (1, simple_grid.nz, simple_grid.ny, simple_grid.nx)
+
+
+class TestSisimConditional:
+    """Test conditional sequential indicator simulation."""
+
+    def test_sisim_conditional(self, sample_data, simple_grid):
+        """Test conditional sisim with sample data."""
+        from gslib_zero.simulation import sisim
+
+        x = sample_data["x"]
+        y = sample_data["y"]
+        z = sample_data["z"]
+        values = sample_data["values"]
+
+        variograms = [
+            VariogramModel.spherical(sill=0.15, ranges=(20.0, 20.0, 10.0), nugget=0.1),
+            VariogramModel.spherical(sill=0.20, ranges=(20.0, 20.0, 10.0), nugget=0.05),
+            VariogramModel.spherical(sill=0.15, ranges=(20.0, 20.0, 10.0), nugget=0.1),
+        ]
+
+        result = sisim(
+            x, y, z, values,
+            grid=simple_grid,
+            thresholds=[8.0, 10.0, 12.0],
+            global_cdf=[0.25, 0.50, 0.75],
+            variograms=variograms,
+            search_radius=(50.0, 50.0, 10.0),
+            nrealizations=2,
+            seed=12345,
+            zmin=values.min(),
+            zmax=values.max(),
+            binary=True,
+        )
+
+        # Check output shape
+        assert result.realizations.shape == (2, simple_grid.nz, simple_grid.ny, simple_grid.nx)
+
+        # Values should be within zmin/zmax bounds (roughly)
+        valid = result.realizations[result.realizations > -900]
+        assert valid.min() >= values.min() - 1
+        assert valid.max() <= values.max() + 1
+
+
+class TestEdgeCases:
+    """Test edge cases and boundary conditions."""
+
+    def test_kt3d_small_dataset(self, simple_grid):
+        """Test kt3d with very small dataset (3 points)."""
+        x = np.array([1.0, 5.0, 9.0])
+        y = np.array([1.0, 5.0, 9.0])
+        z = np.array([0.5, 0.5, 0.5])
+        values = np.array([1.0, 2.0, 3.0])
+
+        variogram = VariogramModel.spherical(sill=1.0, ranges=(10.0, 10.0, 5.0), nugget=0.1)
+        search = SearchParameters(radius1=20.0, radius2=20.0, radius3=10.0, min_samples=1)
+
+        result = kt3d(x, y, z, values, grid=simple_grid, variogram=variogram, search=search, binary=True)
+
+        assert result.estimate.shape == simple_grid.shape
+        # Some cells should be estimated
+        valid = ~is_unestimated(result.estimate)
+        assert valid.sum() > 0
+
+    def test_nscore_small_dataset(self):
+        """Test nscore with small dataset."""
+        values = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+
+        transformed, table = nscore(values, binary=True)
+
+        assert len(transformed) == 5
+        assert table.shape[0] == 5  # Transform table has one entry per unique value
+        # Transformed should be close to normal (sorted order preserved)
+        assert np.all(np.diff(np.sort(transformed)) > 0)  # Strictly increasing
+
+    def test_gamv_small_dataset(self):
+        """Test gamv with small dataset."""
+        n = 10
+        np.random.seed(123)
+        x = np.random.rand(n) * 100
+        y = np.random.rand(n) * 100
+        z = np.zeros(n)
+        values = np.random.randn(n)
+
+        results = gamv(x, y, z, values, nlag=5, lag_distance=10.0, binary=True)
+
+        assert len(results) == 1  # One direction
+        assert len(results[0].gamma) > 0  # Has variogram values
+
+    def test_declus_small_dataset(self):
+        """Test declus with small dataset runs successfully."""
+        # Create a small clustered dataset
+        x = np.array([1.0, 1.5, 2.0, 50.0, 90.0])
+        y = np.array([1.0, 1.5, 2.0, 50.0, 90.0])
+        z = np.zeros(5)
+        values = np.array([1.0, 1.1, 1.2, 2.0, 3.0])
+
+        result = declus(x, y, z, values, cell_min=10.0, cell_max=50.0, n_cells=3, binary=True)
+
+        # Basic checks - returns correct number of weights
+        assert len(result.weights) == 5
+        # Weights should be positive
+        assert np.all(result.weights > 0)
+        # Weights should sum to n (normalized)
+        assert result.weights.sum() == pytest.approx(5.0, rel=0.1)
+
+    def test_kt3d_trimming(self, simple_grid):
+        """Test that kt3d trims values outside tmin/tmax."""
+        x = np.array([1.0, 5.0, 9.0, 5.0])
+        y = np.array([1.0, 5.0, 9.0, 5.0])
+        z = np.array([0.5, 0.5, 0.5, 2.5])
+        values = np.array([1.0, 2.0, 3.0, 1000.0])  # Last value is outlier
+
+        variogram = VariogramModel.spherical(sill=1.0, ranges=(10.0, 10.0, 5.0), nugget=0.1)
+        search = SearchParameters(radius1=20.0, radius2=20.0, radius3=10.0, min_samples=1)
+
+        # With tmax=100, the outlier (1000) should be trimmed
+        result = kt3d(
+            x, y, z, values,
+            grid=simple_grid,
+            variogram=variogram,
+            search=search,
+            tmax=100.0,
+            binary=True
+        )
+
+        # Estimates should be reasonable (not influenced by outlier)
+        valid = result.estimate[~is_unestimated(result.estimate)]
+        assert valid.max() < 50  # Should be much less than outlier
+
+    def test_nscore_trimming(self):
+        """Test that nscore trims values outside tmin/tmax."""
+        values = np.array([1.0, 2.0, 3.0, 4.0, -999.0])  # Last is outlier
+
+        # Trim values below 0
+        transformed, table = nscore(values, tmin=0.0, binary=True)
+
+        # Transform should only have 4 valid entries (outlier trimmed)
+        assert table.shape[0] == 4
+
+    def test_mask_unestimated_integration(self, simple_grid):
+        """Test mask_unestimated works with actual GSLIB output."""
+        x = np.array([1.0, 5.0, 9.0])
+        y = np.array([1.0, 5.0, 9.0])
+        z = np.array([0.5, 0.5, 0.5])
+        values = np.array([1.0, 2.0, 3.0])
+
+        variogram = VariogramModel.spherical(sill=1.0, ranges=(3.0, 3.0, 1.0), nugget=0.1)
+        search = SearchParameters(radius1=5.0, radius2=5.0, radius3=2.0, min_samples=1)
+
+        result = kt3d(x, y, z, values, grid=simple_grid, variogram=variogram, search=search, binary=True)
+
+        # Apply mask_unestimated
+        masked = mask_unestimated(result.estimate)
+
+        # Masked array should exclude UNEST values from statistics
+        assert isinstance(masked, np.ma.MaskedArray)
+        assert masked.count() < simple_grid.ncells  # Some cells are unestimated
+        # Mean should only consider estimated cells
+        if masked.count() > 0:
+            assert 0.5 < masked.mean() < 3.5  # Should be reasonable given input values
 
 
 if __name__ == "__main__":

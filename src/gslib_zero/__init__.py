@@ -63,6 +63,11 @@ from gslib_zero.utils import (
     VariogramModel,
     VariogramType,
     evaluate_variogram,
+    # GSLIB sentinel values
+    UNEST,
+    UNEST_IK,
+    is_unestimated,
+    mask_unestimated,
     # Rotation conversions
     deutsch_to_math,
     math_to_deutsch,
@@ -120,6 +125,11 @@ __all__ = [
     "VariogramType",
     "SearchParameters",
     "evaluate_variogram",
+    # GSLIB sentinel values
+    "UNEST",
+    "UNEST_IK",
+    "is_unestimated",
+    "mask_unestimated",
     # GSLIB program wrappers
     "nscore",
     "backtr",

@@ -8,7 +8,7 @@ Gaussian anamorphosis transforms: nscore and backtr wrappers.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -16,29 +16,55 @@ from gslib_zero.core import AsciiIO, BinaryIO, GSLIBWorkspace, run_gslib
 from gslib_zero.par import ParFileBuilder
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
+
+
+def _coerce_array(arr: "ArrayLike", dtype: type = np.float64) -> "NDArray":
+    """Coerce array-like input to numpy array."""
+    return np.asarray(arr, dtype=dtype)
 
 
 def nscore(
-    data: NDArray[np.floating],
-    weights: NDArray[np.floating] | None = None,
+    values: "ArrayLike | None" = None,
+    weights: "ArrayLike | None" = None,
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
     binary: bool = False,
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    *,
+    data: Any | None = None,
+    value_col: str = "value",
+    weight_col: str | None = None,
+) -> tuple["NDArray[np.float64]", "NDArray[np.float64]"]:
     """
     Apply normal score transform to data.
 
     Transforms data to a standard normal distribution using the quantile
     transform method.
 
+    Two input patterns are supported:
+
+    1. Direct arrays/Series::
+
+        nscore(df.grade, weights=df.wt, binary=True)
+        nscore(grades_array, binary=True)
+
+    2. DataFrame with column names::
+
+        nscore(data=df, value_col='grade', weight_col='wt', binary=True)
+
     Args:
-        data: Input data values (1D array)
-        weights: Optional declustering weights (same length as data).
+        values: Input data values (1D array-like). Can be numpy array,
+                pandas Series, or list. Required unless using data= parameter.
+        weights: Optional declustering weights (same length as values).
                  If None, uniform weights are used.
         tmin: Minimum trimming limit (values below are excluded)
         tmax: Maximum trimming limit (values above are excluded)
         binary: If True, use binary I/O (requires gslib-zero modified binaries)
+        data: DataFrame or dict containing the data columns. If provided,
+              value_col specifies which column to transform.
+        value_col: Column name for values when using data= parameter.
+        weight_col: Column name for weights when using data= parameter.
+                   If None, uniform weights are used.
 
     Returns:
         Tuple of (transformed_data, transform_table) where:
@@ -46,15 +72,28 @@ def nscore(
         - transform_table: 2-column array (original_value, normal_score)
                           for use with backtr
     """
-    data = np.asarray(data, dtype=np.float64).ravel()
-    n = len(data)
-
-    if weights is None:
-        weights = np.ones(n, dtype=np.float64)
+    # Handle DataFrame vs direct array input
+    if data is not None:
+        values_arr = _coerce_array(data[value_col])
+        if weight_col is not None:
+            weights_arr = _coerce_array(data[weight_col])
+        else:
+            weights_arr = None
     else:
-        weights = np.asarray(weights, dtype=np.float64).ravel()
-        if len(weights) != n:
-            raise ValueError(f"weights length ({len(weights)}) must match data length ({n})")
+        if values is None:
+            raise ValueError("values is required when not using data= parameter")
+        values_arr = _coerce_array(values)
+        weights_arr = _coerce_array(weights) if weights is not None else None
+
+    values_arr = values_arr.ravel()
+    n = len(values_arr)
+
+    if weights_arr is None:
+        weights_arr = np.ones(n, dtype=np.float64)
+    else:
+        weights_arr = weights_arr.ravel()
+        if len(weights_arr) != n:
+            raise ValueError(f"weights length ({len(weights_arr)}) must match values length ({n})")
 
     with GSLIBWorkspace() as workspace:
         # Write input data in GSLIB ASCII format
@@ -67,7 +106,7 @@ def nscore(
         # Write data with value and weight columns
         AsciiIO.write_data(
             data_file,
-            {"value": data, "weight": weights},
+            {"value": values_arr, "weight": weights_arr},
             title="nscore input data",
         )
 
@@ -119,8 +158,8 @@ def nscore(
 
 
 def backtr(
-    data: NDArray[np.floating],
-    transform_table: NDArray[np.floating],
+    values: "ArrayLike | None" = None,
+    transform_table: "ArrayLike | None" = None,
     tmin: float = -1.0e21,
     tmax: float = 1.0e21,
     zmin: float | None = None,
@@ -130,12 +169,28 @@ def backtr(
     utail: int = 1,
     utpar: float = 1.0,
     binary: bool = False,
-) -> NDArray[np.float64]:
+    *,
+    data: Any | None = None,
+    value_col: str = "nscore",
+) -> "NDArray[np.float64]":
     """
     Back-transform normal scores to original distribution.
 
+    Two input patterns are supported:
+
+    1. Direct arrays/Series::
+
+        backtr(df.nscore, transform_table, binary=True)
+        backtr(nscore_array, transform_table, binary=True)
+
+    2. DataFrame with column names::
+
+        backtr(data=df, value_col='nscore', transform_table=transform_table, binary=True)
+
     Args:
-        data: Normal score values to back-transform (1D array)
+        values: Normal score values to back-transform (1D array-like).
+                Can be numpy array, pandas Series, or list.
+                Required unless using data= parameter.
         transform_table: Transform table from nscore (2 columns: value, nscore)
         tmin: Minimum trimming limit for input
         tmax: Maximum trimming limit for input
@@ -146,18 +201,30 @@ def backtr(
         utail: Upper tail extrapolation option (1=linear, 2=power, 4=hyperbolic)
         utpar: Upper tail parameter
         binary: If True, use binary I/O (requires gslib-zero modified binaries)
+        data: DataFrame or dict containing the data columns. If provided,
+              value_col specifies which column to transform.
+        value_col: Column name for values when using data= parameter.
 
     Returns:
         Back-transformed data in original units
     """
-    data = np.asarray(data, dtype=np.float64).ravel()
-    transform_table = np.asarray(transform_table, dtype=np.float64)
+    # Handle DataFrame vs direct array input
+    if data is not None:
+        values_arr = _coerce_array(data[value_col]).ravel()
+    else:
+        if values is None:
+            raise ValueError("values is required when not using data= parameter")
+        values_arr = _coerce_array(values).ravel()
+
+    if transform_table is None:
+        raise ValueError("transform_table is required")
+    transform_table_arr = np.asarray(transform_table, dtype=np.float64)
 
     # Get min/max from table if not specified
     if zmin is None:
-        zmin = float(transform_table[:, 0].min())
+        zmin = float(transform_table_arr[:, 0].min())
     if zmax is None:
-        zmax = float(transform_table[:, 0].max())
+        zmax = float(transform_table_arr[:, 0].max())
 
     with GSLIBWorkspace() as workspace:
         data_file = workspace / "backtr_input.dat"
@@ -166,12 +233,12 @@ def backtr(
         par_file = workspace / "backtr.par"
 
         # Write input data
-        AsciiIO.write_column(data_file, data, name="nscore", title="backtr input")
+        AsciiIO.write_column(data_file, values_arr, name="nscore", title="backtr input")
 
         # Write transform table (raw format - same as nscore output)
-        if transform_table.ndim == 1 or transform_table.shape[1] < 2:
+        if transform_table_arr.ndim == 1 or transform_table_arr.shape[1] < 2:
             raise ValueError("transform_table must have at least 2 columns")
-        AsciiIO.write_raw(table_file, transform_table[:, :2])
+        AsciiIO.write_raw(table_file, transform_table_arr[:, :2])
 
         # Build par file matching original GSLIB backtr format
         # See backtr.for lines 102-132 for expected format

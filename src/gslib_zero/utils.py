@@ -18,6 +18,71 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
+# ============================================================================
+# GSLIB Sentinel Values
+# ============================================================================
+
+# Unestimated cell value for kt3d, sgsim, sisim (continuous variables)
+UNEST: float = -999.0
+
+# Unestimated cell value for ik3d (indicator probabilities)
+UNEST_IK: float = -9.9999
+
+
+def is_unestimated(
+    values: NDArray[np.floating],
+    tol: float = 0.01,
+) -> NDArray[np.bool_]:
+    """
+    Identify unestimated cells in GSLIB output.
+
+    GSLIB uses sentinel values to mark cells that couldn't be estimated
+    (e.g., outside search neighborhood, masked cells). This function
+    detects both continuous (-999.0) and indicator (-9.9999) sentinel values.
+
+    Args:
+        values: Array of estimated values from kt3d, ik3d, sgsim, or sisim
+        tol: Tolerance for floating-point comparison (default 0.01)
+
+    Returns:
+        Boolean array where True indicates unestimated cells
+
+    Example:
+        >>> result = kt3d(...)
+        >>> unest_mask = is_unestimated(result.estimate)
+        >>> valid_estimates = result.estimate[~unest_mask]
+    """
+    values = np.asarray(values)
+    return (np.abs(values - UNEST) < tol) | (np.abs(values - UNEST_IK) < tol)
+
+
+def mask_unestimated(
+    values: NDArray[np.floating],
+    tol: float = 0.01,
+) -> np.ma.MaskedArray:
+    """
+    Convert GSLIB output to a masked array with unestimated cells masked.
+
+    This is useful for statistics and plotting, where unestimated cells
+    should be excluded from calculations.
+
+    Args:
+        values: Array of estimated values from kt3d, ik3d, sgsim, or sisim
+        tol: Tolerance for floating-point comparison (default 0.01)
+
+    Returns:
+        Masked array where unestimated cells are masked
+
+    Example:
+        >>> result = kt3d(...)
+        >>> masked = mask_unestimated(result.estimate)
+        >>> print(f"Mean of valid cells: {masked.mean():.2f}")
+    """
+    values = np.asarray(values)
+    mask = is_unestimated(values, tol)
+    return np.ma.MaskedArray(values, mask=mask)
+
+
 class VariogramType(IntEnum):
     """GSLIB variogram model types."""
 
